@@ -9,6 +9,13 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
     "@tokenized-strategy/=lib/tokenized-strategy/src/",
     "@periphery/=lib/tokenized-strategy-periphery/src/",
+    "@yearn-vaults/=lib/yearn-vaults-v3/contracts/",
 ]
+
+[fmt]
+single_line_statement_blocks = "single"
+multiline_func_header = "params_first"
+contract_new_lines = true
+number_underscore = "preserve"
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

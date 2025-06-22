@@ -6,6 +6,7 @@ import {Setup} from "./utils/Setup.sol";
 import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
 
 contract OracleTest is Setup {
+
     StrategyAprOracle public oracle;
 
     function setUp() public override {
@@ -25,27 +26,27 @@ contract OracleTest is Setup {
 
         // TODO: Uncomment to test the apr goes up and down based on debt changes
         /**
-        uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(_strategy, -int256(_delta));
-
-        // The apr should go up if deposits go down
-        assertLt(currentApr, negativeDebtChangeApr, "negative change");
-
-        uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
-
-        assertGt(currentApr, positiveDebtChangeApr, "positive change");
-        */
+         * uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(_strategy, -int256(_delta));
+         *
+         *     // The apr should go up if deposits go down
+         *     assertLt(currentApr, negativeDebtChangeApr, "negative change");
+         *
+         *     uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
+         *
+         *     assertGt(currentApr, positiveDebtChangeApr, "positive change");
+         */
 
         // TODO: Uncomment if there are setter functions to test.
         /**
-        vm.expectRevert("!governance");
-        vm.prank(user);
-        oracle.setterFunction(setterVariable);
-
-        vm.prank(management);
-        oracle.setterFunction(setterVariable);
-
-        assertEq(oracle.setterVariable(), setterVariable);
-        */
+         * vm.expectRevert("!governance");
+         *     vm.prank(user);
+         *     oracle.setterFunction(setterVariable);
+         *
+         *     vm.prank(management);
+         *     oracle.setterFunction(setterVariable);
+         *
+         *     assertEq(oracle.setterVariable(), setterVariable);
+         */
     }
 
     function test_oracle(uint256 _amount, uint16 _percentChange) public {
@@ -60,4 +61,5 @@ contract OracleTest is Setup {
     }
 
     // TODO: Deploy multiple strategies with different tokens as `asset` to test against the oracle.
+
 }

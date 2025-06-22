@@ -1,248 +1,318 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {BaseStrategy, ERC20} from "@tokenized-strategy/BaseStrategy.sol";
+import {IVault} from "@yearn-vaults/interfaces/IVault.sol";
+import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "../interfaces/<protocol>/<Interface>.sol";
+import {AggregatorInterface} from "./interfaces/AggregatorInterface.sol";
+import {IVaultAPROracle} from "./interfaces/IVaultAPROracle.sol";
+import {IAddressesRegistry, IBorrowerOperations, IPriceFeed, ITroveManager} from "./interfaces/IAddressesRegistry.sol";
 
-/**
- * The `TokenizedStrategy` variable can be used to retrieve the strategies
- * specific storage data your contract.
- *
- *       i.e. uint256 totalAssets = TokenizedStrategy.totalAssets()
- *
- * This can not be used for write functions. Any TokenizedStrategy
- * variables that need to be updated post deployment will need to
- * come from an external call from the strategies specific `management`.
- */
+import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
 
-// NOTE: To implement permissioned functions you can use the onlyManagement, onlyEmergencyAuthorized and onlyKeepers modifiers
+contract LiquityV2LBStrategy is BaseLenderBorrower {
 
-contract Strategy is BaseStrategy {
     using SafeERC20 for ERC20;
 
+    // ===============================================================
+    // Storage
+    // ===============================================================
+
+    /// @notice Trove ID
+    uint256 public troveId;
+
+    // ===============================================================
+    // Constants
+    // ===============================================================
+
+    /// @notice The difference in decimals between the AMM price (1e18) and our price (1e8)
+    uint256 private constant DECIMALS_DIFF = 1e10;
+
+    /// @notice Liquity's minimum amount of net Bold debt a trove must have
+    ///         If a trove is redeeemed and the debt is less than this, it will be considered a zombie trove
+    uint256 private constant MIN_DEBT = 2_000 * 1e18;
+
+    /// @notice Liquity's amount of WETH to be locked in gas pool when opening a trove
+    ///         Will be pulled from the contract on `_openTrove`
+    uint256 private constant ETH_GAS_COMPENSATION = 0.0375 ether;
+
+    /// @notice Minimum annual interest rate
+    uint256 private constant MIN_ANNUAL_INTEREST_RATE = 1e18 / 100 / 2; // 0.5%
+
+    /// @notice The governance address
+    address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
+
+    /// @notice WETH token
+    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    /// @notice The lender vault APR oracle contract
+    IVaultAPROracle public constant VAULT_APR_ORACLE = IVaultAPROracle(0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92);
+
+    /// @notice Same chainlink price feed as used by the Liquity branch
+    AggregatorInterface public immutable PRICE_FEED;
+
+    /// @notice Liquity's borrower operations contract
+    IBorrowerOperations public immutable BORROWER_OPERATIONS;
+
+    /// @notice Liquity's trove manager contract
+    ITroveManager public immutable TROVE_MANAGER;
+
+    // ===============================================================
+    // Constructor
+    // ===============================================================
+
     constructor(
-        address _asset,
+        IAddressesRegistry _addressesRegistry,
+        IVault _lenderVault,
+        AggregatorInterface _priceFeed,
         string memory _name
-    ) BaseStrategy(_asset, _name) {}
-
-    /*//////////////////////////////////////////////////////////////
-                NEEDED TO BE OVERRIDDEN BY STRATEGIST
-    //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @dev Can deploy up to '_amount' of 'asset' in the yield source.
-     *
-     * This function is called at the end of a {deposit} or {mint}
-     * call. Meaning that unless a whitelist is implemented it will
-     * be entirely permissionless and thus can be sandwiched or otherwise
-     * manipulated.
-     *
-     * @param _amount The amount of 'asset' that the strategy can attempt
-     * to deposit in the yield source.
-     */
-    function _deployFunds(uint256 _amount) internal override {
-        // TODO: implement deposit logic EX:
-        //
-        //      lendingPool.deposit(address(asset), _amount ,0);
-    }
-
-    /**
-     * @dev Should attempt to free the '_amount' of 'asset'.
-     *
-     * NOTE: The amount of 'asset' that is already loose has already
-     * been accounted for.
-     *
-     * This function is called during {withdraw} and {redeem} calls.
-     * Meaning that unless a whitelist is implemented it will be
-     * entirely permissionless and thus can be sandwiched or otherwise
-     * manipulated.
-     *
-     * Should not rely on asset.balanceOf(address(this)) calls other than
-     * for diff accounting purposes.
-     *
-     * Any difference between `_amount` and what is actually freed will be
-     * counted as a loss and passed on to the withdrawer. This means
-     * care should be taken in times of illiquidity. It may be better to revert
-     * if withdraws are simply illiquid so not to realize incorrect losses.
-     *
-     * @param _amount, The amount of 'asset' to be freed.
-     */
-    function _freeFunds(uint256 _amount) internal override {
-        // TODO: implement withdraw logic EX:
-        //
-        //      lendingPool.withdraw(address(asset), _amount);
-    }
-
-    /**
-     * @dev Internal function to harvest all rewards, redeploy any idle
-     * funds and return an accurate accounting of all funds currently
-     * held by the Strategy.
-     *
-     * This should do any needed harvesting, rewards selling, accrual,
-     * redepositing etc. to get the most accurate view of current assets.
-     *
-     * NOTE: All applicable assets including loose assets should be
-     * accounted for in this function.
-     *
-     * Care should be taken when relying on oracles or swap values rather
-     * than actual amounts as all Strategy profit/loss accounting will
-     * be done based on this returned value.
-     *
-     * This can still be called post a shutdown, a strategist can check
-     * `TokenizedStrategy.isShutdown()` to decide if funds should be
-     * redeployed or simply realize any profits/losses.
-     *
-     * @return _totalAssets A trusted and accurate account for the total
-     * amount of 'asset' the strategy currently holds including idle funds.
-     */
-    function _harvestAndReport()
-        internal
-        override
-        returns (uint256 _totalAssets)
+    )
+        BaseLenderBorrower(_addressesRegistry.collToken(), _name, _addressesRegistry.boldToken(), address(_lenderVault))
     {
-        // TODO: Implement harvesting logic and accurate accounting EX:
-        //
-        //      if(!TokenizedStrategy.isShutdown()) {
-        //          _claimAndSellRewards();
-        //      }
-        //      _totalAssets = aToken.balanceOf(address(this)) + asset.balanceOf(address(this));
-        //
-        _totalAssets = asset.balanceOf(address(this));
+        require(IStrategy(_lenderVault.asset()).asset() == borrowToken, "!lenderVault");
+
+        BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
+        TROVE_MANAGER = _addressesRegistry.troveManager();
+        PRICE_FEED =
+            address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
+        require(PRICE_FEED.decimals() == 8, "!priceFeed");
+
+        asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
+        WETH.forceApprove(address(BORROWER_OPERATIONS), ETH_GAS_COMPENSATION);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                    OPTIONAL TO OVERRIDE BY STRATEGIST
-    //////////////////////////////////////////////////////////////*/
+    // ===============================================================
+    // Privileged functions
+    // ===============================================================
 
-    /**
-     * @notice Gets the max amount of `asset` that can be withdrawn.
-     * @dev Defaults to an unlimited amount for any address. But can
-     * be overridden by strategists.
-     *
-     * This function will be called before any withdraw or redeem to enforce
-     * any limits desired by the strategist. This can be used for illiquid
-     * or sandwichable strategies.
-     *
-     *   EX:
-     *       return asset.balanceOf(yieldSource);
-     *
-     * This does not need to take into account the `_owner`'s share balance
-     * or conversion rates from shares to assets.
-     *
-     * @param . The address that is withdrawing from the strategy.
-     * @return . The available amount that can be withdrawn in terms of `asset`
-     */
-    function availableWithdrawLimit(
-        address /*_owner*/
+    /// @notice Open a trove
+    /// @dev
+    ///     - Callable only once. If the position gets liquidated, we'll need to shutdown the strategy
+    ///     - `asset` balance must be large enough to open a trove with `MIN_DEBT`
+    ///     - Borrowing at the minimum interest rate, because we don't mind getting redeeemed
+    /// @param _upperHint Upper hint
+    /// @param _lowerHint Lower hint
+    function openTrove(uint256 _upperHint, uint256 _lowerHint) external onlyEmergencyAuthorized {
+        require(troveId == 0, "troveId");
+        uint256 _collAmount = balanceOfAsset();
+        WETH.safeTransferFrom(msg.sender, address(this), ETH_GAS_COMPENSATION);
+        troveId = BORROWER_OPERATIONS.openTrove(
+            address(this), // owner
+            block.timestamp, // ownerIndex
+            _collAmount,
+            MIN_DEBT, // boldAmount
+            _upperHint,
+            _lowerHint,
+            MIN_ANNUAL_INTEREST_RATE, // annualInterestRate
+            type(uint256).max, // maxUpfrontFee
+            address(0), // addManager
+            address(0), // removeManager
+            address(0) // receiver
+        );
+        // @audit addManager/removeManager -- SMS, so can adjustZombieTrove?
+    }
+
+    /// @notice Claim remaining collateral from a liquidation
+    function claimCollateral() external onlyEmergencyAuthorized {
+        BORROWER_OPERATIONS.claimCollateral();
+    }
+
+    /// @notice Manually buy borrow token
+    /// @dev Potentially can never reach `_buyBorrowToken()` in `_liquidatePosition()`
+    ///      because of lender vault accounting (i.e. `balanceOfLentAssets() == 0` is never true)
+    function buyBorrowToken(
+        uint256 _amount
+    ) external onlyEmergencyAuthorized {
+        if (_amount == type(uint256).max) _amount = balanceOfAsset();
+        _buyBorrowToken(_amount);
+    }
+
+    /// @notice Sweep of non-asset ERC20 tokens to governance
+    /// @param _token The ERC20 token to sweep
+    function sweep(
+        ERC20 _token
+    ) external {
+        require(msg.sender == GOV, "!gov");
+        require(_token != asset, "!asset");
+        _token.safeTransfer(GOV, _token.balanceOf(address(this)));
+    }
+
+    // ===============================================================
+    // Write functions
+    // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function _tend(
+        uint256 _totalIdle
+    ) internal virtual override {
+        _claimAndSellRewards();
+        return BaseLenderBorrower._tend(_totalIdle);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _leveragePosition(
+        uint256 _amount
+    ) internal override {
+        if (TROVE_MANAGER.getTroveStatus(troveId) != ITroveManager.Status.active) return;
+        BaseLenderBorrower._leveragePosition(_amount);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _supplyCollateral(
+        uint256 _amount
+    ) internal override {
+        if (_amount > 0) BORROWER_OPERATIONS.addColl(troveId, _amount);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _withdrawCollateral(
+        uint256 _amount
+    ) internal override {
+        if (_amount > 0) BORROWER_OPERATIONS.withdrawColl(troveId, _amount);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _borrow(
+        uint256 _amount
+    ) internal override {
+        if (_amount > 0) BORROWER_OPERATIONS.withdrawBold(troveId, _amount, type(uint256).max);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _repay(
+        uint256 _amount
+    ) internal override {
+        if (_amount > 0) BORROWER_OPERATIONS.repayBold(troveId, _amount);
+    }
+
+    // ===============================================================
+    // View functions
+    // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function _tendTrigger() internal view override returns (bool) {
+        if (TROVE_MANAGER.getTroveStatus(troveId) != ITroveManager.Status.active) return false;
+        if (isRewardsToClaim() && _isBaseFeeAcceptable()) return true;
+        return BaseLenderBorrower._tendTrigger();
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _getPrice(
+        address _asset
+    ) internal view override returns (uint256) {
+        return _asset == borrowToken ? WAD / DECIMALS_DIFF : uint256(PRICE_FEED.latestAnswer());
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _isSupplyPaused() internal pure override returns (bool) {
+        return false;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _isBorrowPaused() internal pure override returns (bool) {
+        return false;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _isLiquidatable() internal view override returns (bool) {
+        return TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset))) < BORROWER_OPERATIONS.MCR();
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _maxCollateralDeposit() internal pure override returns (uint256) {
+        return type(uint256).max;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _maxBorrowAmount() internal view override returns (uint256) {
+        return type(uint256).max;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function getNetBorrowApr(
+        uint256 /*_newAmount*/
     ) public view override returns (uint256) {
-        // NOTE: Withdraw limitations such as liquidity constraints should be accounted for HERE
-        //  rather than _freeFunds in order to not count them as losses on withdraws.
-
-        // TODO: If desired implement withdraw limit logic and any needed state variables.
-
-        // EX:
-        // if(yieldSource.notShutdown()) {
-        //    return asset.balanceOf(address(this)) + asset.balanceOf(yieldSource);
-        // }
-        return asset.balanceOf(address(this));
+        return MIN_ANNUAL_INTEREST_RATE;
     }
 
-    /**
-     * @notice Gets the max amount of `asset` that an address can deposit.
-     * @dev Defaults to an unlimited amount for any address. But can
-     * be overridden by strategists.
-     *
-     * This function will be called before any deposit or mints to enforce
-     * any limits desired by the strategist. This can be used for either a
-     * traditional deposit limit or for implementing a whitelist etc.
-     *
-     *   EX:
-     *      if(isAllowed[_owner]) return super.availableDepositLimit(_owner);
-     *
-     * This does not need to take into account any conversion rates
-     * from shares to assets. But should know that any non max uint256
-     * amounts may be converted to shares. So it is recommended to keep
-     * custom amounts low enough as not to cause overflow when multiplied
-     * by `totalSupply`.
-     *
-     * @param . The address that is depositing into the strategy.
-     * @return . The available amount the `_owner` can deposit in terms of `asset`
-     *
-    function availableDepositLimit(
-        address _owner
+    /// @inheritdoc BaseLenderBorrower
+    function getNetRewardApr(
+        uint256 _newAmount
     ) public view override returns (uint256) {
-        TODO: If desired Implement deposit limit logic and any needed state variables .
-        
-        EX:    
-            uint256 totalAssets = TokenizedStrategy.totalAssets();
-            return totalAssets >= depositLimit ? 0 : depositLimit - totalAssets;
-    }
-    */
-
-    /**
-     * @dev Optional function for strategist to override that can
-     *  be called in between reports.
-     *
-     * If '_tend' is used tendTrigger() will also need to be overridden.
-     *
-     * This call can only be called by a permissioned role so may be
-     * through protected relays.
-     *
-     * This can be used to harvest and compound rewards, deposit idle funds,
-     * perform needed position maintenance or anything else that doesn't need
-     * a full report for.
-     *
-     *   EX: A strategy that can not deposit funds without getting
-     *       sandwiched can use the tend when a certain threshold
-     *       of idle to totalAssets has been reached.
-     *
-     * This will have no effect on PPS of the strategy till report() is called.
-     *
-     * @param _totalIdle The current amount of idle funds that are available to deploy.
-     *
-    function _tend(uint256 _totalIdle) internal override {}
-    */
-
-    /**
-     * @dev Optional trigger to override if tend() will be used by the strategy.
-     * This must be implemented if the strategy hopes to invoke _tend().
-     *
-     * @return . Should return true if tend() should be called by keeper or false if not.
-     *
-    function _tendTrigger() internal view override returns (bool) {}
-    */
-
-    /**
-     * @dev Optional function for a strategist to override that will
-     * allow management to manually withdraw deployed funds from the
-     * yield source if a strategy is shutdown.
-     *
-     * This should attempt to free `_amount`, noting that `_amount` may
-     * be more than is currently deployed.
-     *
-     * NOTE: This will not realize any profits or losses. A separate
-     * {report} will be needed in order to record any profit/loss. If
-     * a report may need to be called after a shutdown it is important
-     * to check if the strategy is shutdown during {_harvestAndReport}
-     * so that it does not simply re-deploy all funds that had been freed.
-     *
-     * EX:
-     *   if(freeAsset > 0 && !TokenizedStrategy.isShutdown()) {
-     *       depositFunds...
-     *    }
-     *
-     * @param _amount The amount of asset to attempt to free.
-     *
-    function _emergencyWithdraw(uint256 _amount) internal override {
-        TODO: If desired implement simple logic to free deployed funds.
-
-        EX:
-            _amount = min(_amount, aToken.balanceOf(address(this)));
-            _freeFunds(_amount);
+        return VAULT_APR_ORACLE.getExpectedApr(address(lenderVault), int256(_newAmount));
     }
 
-    */
+    /// @inheritdoc BaseLenderBorrower
+    function getLiquidateCollateralFactor() public view override returns (uint256) {
+        return WAD * WAD / BORROWER_OPERATIONS.MCR();
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function balanceOfCollateral() public view override returns (uint256) {
+        return TROVE_MANAGER.getLatestTroveData(troveId).entireColl;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function balanceOfDebt() public view override returns (uint256) {
+        return TROVE_MANAGER.getLatestTroveData(troveId).entireDebt;
+    }
+
+    function isRewardsToClaim() public view returns (bool) {
+        // @todo
+        return false;
+    }
+
+    // ===============================================================
+    // Harvest / Token conversions
+    // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function _claimRewards() internal pure override {
+        return;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _claimAndSellRewards() internal override {
+        uint256 _loose = balanceOfBorrowToken();
+        uint256 _have = balanceOfLentAssets() + _loose;
+        uint256 _owe = balanceOfDebt();
+        if (_owe >= _have) return;
+
+        uint256 _toSell = _have - _owe;
+        if (_toSell > _loose) _withdrawBorrowToken(_toSell - _loose);
+
+        _loose = balanceOfBorrowToken();
+
+        _sellBorrowToken(Math.min(_toSell, _loose));
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _sellBorrowToken(
+        uint256 _amount
+    ) internal virtual override {
+        // AMM.exchange(CRVUSD_INDEX, ASSET_INDEX, _amount, 0);
+        // BOLD --> ETH
+        // @todo
+        return;
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _buyBorrowToken() internal virtual override {
+        uint256 _borrowTokenStillOwed = borrowTokenOwedBalance();
+        uint256 _maxAssetBalance = _fromUsd(_toUsd(_borrowTokenStillOwed, borrowToken), address(asset));
+        _buyBorrowToken(_maxAssetBalance);
+    }
+
+    /// @notice Buy borrow token
+    /// @param _amount The amount of asset to sale
+    function _buyBorrowToken(
+        uint256 _amount
+    ) internal {
+        // AMM.exchange(ASSET_INDEX, CRVUSD_INDEX, _amount, 0);
+        // ETH --> BOLD
+        // @todo
+        return;
+    }
+
 }
