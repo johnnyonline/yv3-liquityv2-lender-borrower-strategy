@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
-import {IVault} from "@yearn-vaults/interfaces/IVault.sol";
 import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {IExchange} from "./interfaces/IExchange.sol";
 import {AggregatorInterface} from "./interfaces/AggregatorInterface.sol";
 import {IVaultAPROracle} from "./interfaces/IVaultAPROracle.sol";
-import {IAddressesRegistry, IBorrowerOperations, IPriceFeed, ITroveManager} from "./interfaces/IAddressesRegistry.sol";
+import {IAddressesRegistry, IBorrowerOperations, ITroveManager} from "./interfaces/IAddressesRegistry.sol";
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
 
@@ -22,12 +22,18 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Trove ID
     uint256 public troveId;
 
+    /// @notice Any amount below this will be ignored
+    uint256 public dustThreshold;
+
     // ===============================================================
     // Constants
     // ===============================================================
 
     /// @notice The difference in decimals between the AMM price (1e18) and our price (1e8)
     uint256 private constant DECIMALS_DIFF = 1e10;
+
+    /// @notice Minimum dust threshold
+    uint256 private constant MIN_DUST_THRESHOLD = 1e15;
 
     /// @notice Liquity's minimum amount of net Bold debt a trove must have
     ///         If a trove is redeeemed and the debt is less than this, it will be considered a zombie trove
@@ -58,26 +64,47 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Liquity's trove manager contract
     ITroveManager public immutable TROVE_MANAGER;
 
+    /// @notice The exchange contract for buying/selling borrow token
+    IExchange public immutable EXCHANGE;
+
+    /// @notice The staked lender vault contract (i.e. st-yBOLD)
+    IStrategy public immutable STAKED_LENDER_VAULT;
+
     // ===============================================================
     // Constructor
     // ===============================================================
 
+    /// @param _addressesRegistry The Liquity addresses registry contract
+    /// @param _stakedLenderVault The staked lender vault contract (i.e. st-yBOLD)
+    /// @param _priceFeed The price feed contract for the `asset`
+    /// @param _exchange The exchange contract for buying/selling borrow token
+    /// @param _name The name of the strategy
     constructor(
         IAddressesRegistry _addressesRegistry,
-        IVault _lenderVault,
+        IStrategy _stakedLenderVault,
         AggregatorInterface _priceFeed,
+        IExchange _exchange,
         string memory _name
     )
-        BaseLenderBorrower(_addressesRegistry.collToken(), _name, _addressesRegistry.boldToken(), address(_lenderVault))
+        BaseLenderBorrower(
+            _addressesRegistry.collToken(), // asset
+            _name,
+            _addressesRegistry.boldToken(), // borrowToken
+            _stakedLenderVault.asset() // lenderVault
+        )
     {
-        require(IStrategy(_lenderVault.asset()).asset() == borrowToken, "!lenderVault");
+        require(_exchange.TOKEN() == borrowToken && _exchange.PAIRED_WITH() == address(asset), "!exchange");
 
         BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
         TROVE_MANAGER = _addressesRegistry.troveManager();
-        PRICE_FEED =
-            address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
+        PRICE_FEED = address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
         require(PRICE_FEED.decimals() == 8, "!priceFeed");
+        EXCHANGE = _exchange;
+        STAKED_LENDER_VAULT = _stakedLenderVault;
 
+        ERC20(address(lenderVault)).forceApprove(address(STAKED_LENDER_VAULT), type(uint256).max);
+        ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
+        asset.forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
         WETH.forceApprove(address(BORROWER_OPERATIONS), ETH_GAS_COMPENSATION);
     }
@@ -110,7 +137,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             address(0), // removeManager
             address(0) // receiver
         );
-        // @audit addManager/removeManager -- SMS, so can adjustZombieTrove?
+        // @todo addManager/removeManager -- SMS, so can adjustZombieTrove? -- just add a function here
     }
 
     /// @notice Claim remaining collateral from a liquidation
@@ -128,6 +155,15 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         _buyBorrowToken(_amount);
     }
 
+    /// @notice Set the dust threshold for the strategy
+    /// @param _dustThreshold New dust threshold
+    function setDustThreshold(
+        uint256 _dustThreshold
+    ) external onlyManagement {
+        require(_dustThreshold >= MIN_DUST_THRESHOLD, "!minDust");
+        dustThreshold = _dustThreshold;
+    }
+
     /// @notice Sweep of non-asset ERC20 tokens to governance
     /// @param _token The ERC20 token to sweep
     function sweep(
@@ -141,14 +177,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
     // Write functions
     // ===============================================================
-
-    /// @inheritdoc BaseLenderBorrower
-    function _tend(
-        uint256 _totalIdle
-    ) internal virtual override {
-        _claimAndSellRewards();
-        return BaseLenderBorrower._tend(_totalIdle);
-    }
 
     /// @inheritdoc BaseLenderBorrower
     function _leveragePosition(
@@ -191,13 +219,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
 
     /// @inheritdoc BaseLenderBorrower
-    function _tendTrigger() internal view override returns (bool) {
-        if (TROVE_MANAGER.getTroveStatus(troveId) != ITroveManager.Status.active) return false;
-        if (isRewardsToClaim() && _isBaseFeeAcceptable()) return true;
-        return BaseLenderBorrower._tendTrigger();
-    }
-
-    /// @inheritdoc BaseLenderBorrower
     function _getPrice(
         address _asset
     ) internal view override returns (uint256) {
@@ -225,14 +246,14 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
-    function _maxBorrowAmount() internal view override returns (uint256) {
+    function _maxBorrowAmount() internal pure override returns (uint256) {
         return type(uint256).max;
     }
 
     /// @inheritdoc BaseLenderBorrower
     function getNetBorrowApr(
         uint256 /*_newAmount*/
-    ) public view override returns (uint256) {
+    ) public pure override returns (uint256) {
         return MIN_ANNUAL_INTEREST_RATE;
     }
 
@@ -240,7 +261,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function getNetRewardApr(
         uint256 _newAmount
     ) public view override returns (uint256) {
-        return VAULT_APR_ORACLE.getExpectedApr(address(lenderVault), int256(_newAmount));
+        return VAULT_APR_ORACLE.getStrategyApr(address(STAKED_LENDER_VAULT), int256(_newAmount));
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -259,13 +280,66 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     function isRewardsToClaim() public view returns (bool) {
-        // @todo
-        return false;
+        uint256 _loose = balanceOfBorrowToken();
+        uint256 _have = balanceOfLentAssets() + _loose;
+        uint256 _owe = balanceOfDebt();
+        return _have > _owe && _have - _owe > dustThreshold;
+    }
+
+    // ===============================================================
+    // Lender vault
+    // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function _lendBorrowToken(
+        uint256 amount
+    ) internal override {
+        STAKED_LENDER_VAULT.deposit(lenderVault.deposit(amount, address(this)), address(this));
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _withdrawBorrowToken(
+        uint256 amount
+    ) internal override {
+        uint256 shares = Math.min(lenderVault.previewWithdraw(amount), lenderVault.balanceOf(address(this)));
+        shares = STAKED_LENDER_VAULT.previewWithdraw(shares);
+        shares = STAKED_LENDER_VAULT.redeem(shares, address(this), address(this));
+        lenderVault.redeem(shares, address(this), address(this));
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _lenderMaxDeposit() internal view override returns (uint256) {
+        return Math.min(lenderVault.maxDeposit(address(this)), lenderVault.convertToAssets(STAKED_LENDER_VAULT.maxDeposit(address(this))));
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _lenderMaxWithdraw() internal view override returns (uint256) {
+        return lenderVault.convertToAssets(STAKED_LENDER_VAULT.convertToAssets(STAKED_LENDER_VAULT.maxRedeem(address(this))));
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function balanceOfLentAssets() public view override returns (uint256) {
+        return lenderVault.convertToAssets(STAKED_LENDER_VAULT.convertToAssets(STAKED_LENDER_VAULT.balanceOf(address(this))));
     }
 
     // ===============================================================
     // Harvest / Token conversions
     // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function _tendTrigger() internal view override returns (bool) {
+        if (TROVE_MANAGER.getTroveStatus(troveId) != ITroveManager.Status.active) return false;
+        if (isRewardsToClaim() && _isBaseFeeAcceptable()) return true;
+        return BaseLenderBorrower._tendTrigger();
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _tend(
+        uint256 _totalIdle
+    ) internal override {
+        _claimAndSellRewards();
+        return BaseLenderBorrower._tend(_totalIdle);
+    }
 
     /// @inheritdoc BaseLenderBorrower
     function _claimRewards() internal pure override {
@@ -290,11 +364,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @inheritdoc BaseLenderBorrower
     function _sellBorrowToken(
         uint256 _amount
-    ) internal virtual override {
-        // AMM.exchange(CRVUSD_INDEX, ASSET_INDEX, _amount, 0);
-        // BOLD --> ETH
-        // @todo
-        return;
+    ) internal override {
+        EXCHANGE.swap(_amount, 0, true);
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -309,10 +380,21 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _buyBorrowToken(
         uint256 _amount
     ) internal {
-        // AMM.exchange(ASSET_INDEX, CRVUSD_INDEX, _amount, 0);
-        // ETH --> BOLD
-        // @todo
-        return;
+        EXCHANGE.swap(_amount, 0, false);
+    }
+
+    /// @inheritdoc BaseLenderBorrower
+    function _emergencyWithdraw(
+        uint256 _amount
+    ) internal override {
+        if (_amount > 0) _withdrawBorrowToken(Math.min(_amount, _lenderMaxWithdraw()));
+
+        uint256 _troveId = troveId;
+        if (TROVE_MANAGER.getTroveStatus(_troveId) == ITroveManager.Status.active) {
+            BORROWER_OPERATIONS.closeTrove(_troveId);
+            uint256 _balance = WETH.balanceOf(address(this));
+            if (_balance > 0) WETH.safeTransfer(TokenizedStrategy.management(), _balance);
+        }
     }
 
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
-import {LiquityV2LBStrategy as Strategy, AggregatorInterface, IAddressesRegistry, IVault} from "./Strategy.sol";
+import {LiquityV2LBStrategy as Strategy, AggregatorInterface, IAddressesRegistry, IExchange, IStrategy} from "./Strategy.sol";
 import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
 
 contract StrategyFactory {
@@ -27,19 +27,21 @@ contract StrategyFactory {
     /**
      * @notice Deploy a new Strategy.
      * @param _addressesRegistry The address registry of the Liquity collateral branch.
-     * @param _lenderVault The vault where the strategy will lend (e.g. sy-yBOLD).
+     * @param _stakedLenderVault The staked lender vault to use for the strategy (i.e. st-yBOLD).
      * @param _priceFeed The price feed for the asset.
+     * @param _exchange The exchange to use for swapping.
      * @return . The address of the new strategy.
      */
     function newStrategy(
         IAddressesRegistry _addressesRegistry,
-        IVault _lenderVault,
+        IStrategy _stakedLenderVault,
         AggregatorInterface _priceFeed,
+        IExchange _exchange,
         string calldata _name
     ) external virtual returns (address) {
         // tokenized strategies available setters.
         IStrategyInterface _newStrategy =
-            IStrategyInterface(address(new Strategy(_addressesRegistry, _lenderVault, _priceFeed, _name)));
+            IStrategyInterface(address(new Strategy(_addressesRegistry, _stakedLenderVault, _priceFeed, _exchange, _name)));
 
         _newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
 

@@ -4,11 +4,11 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {
-    LiquityV2LBStrategy as Strategy, ERC20, AggregatorInterface, IAddressesRegistry, IVault
-} from "../../Strategy.sol";
+import {ETHToBOLDExchange as Exchange} from "../../periphery/Exchange.sol";
+import {LiquityV2LBStrategy as Strategy, ERC20, AggregatorInterface, IAddressesRegistry, IExchange, IStrategy} from "../../Strategy.sol";
 import {StrategyFactory} from "../../StrategyFactory.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {IExchange} from "../../interfaces/IExchange.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -29,9 +29,14 @@ interface IFactory {
 
 contract Setup is Test, IEvents {
 
+    // Token addresses used in the tests.
+    address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526; // Liquity WETH
+    address public stybold = 0x23346B04a7f55b8760E5860AA5A77383D63491cD; // st-yBOLD
+
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
+    IExchange public exchange;
 
     StrategyFactory public strategyFactory;
 
@@ -59,10 +64,13 @@ contract Setup is Test, IEvents {
     uint256 public profitMaxUnlockTime = 10 days;
 
     function setUp() public virtual {
+        uint256 _blockNumber = 22_763_240; // Caching for faster tests
+        vm.selectFork(vm.createFork(vm.envString("ETH_RPC_URL"), _blockNumber));
+
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["WETH"]);
 
         // Set decimals
         decimals = asset.decimals();
@@ -84,13 +92,16 @@ contract Setup is Test, IEvents {
     }
 
     function setUpStrategy() public returns (address) {
+        exchange = new Exchange();
+
         // we save the strategy as a IStrategyInterface to give it the needed interface
         IStrategyInterface _strategy = IStrategyInterface(
             address(
                 strategyFactory.newStrategy(
-                    IAddressesRegistry(address(0)),
-                    IVault(address(0)),
+                    IAddressesRegistry(addressesRegistry),
+                    IStrategy(stybold),
                     AggregatorInterface(address(0)),
+                    IExchange(address(exchange)),
                     "Tokenized Strategy"
                 )
             )
@@ -116,12 +127,7 @@ contract Setup is Test, IEvents {
     }
 
     // For checking the amounts in the strategy
-    function checkStrategyTotals(
-        IStrategyInterface _strategy,
-        uint256 _totalAssets,
-        uint256 _totalDebt,
-        uint256 _totalIdle
-    ) public {
+    function checkStrategyTotals(IStrategyInterface _strategy, uint256 _totalAssets, uint256 _totalDebt, uint256 _totalIdle) public {
         uint256 _assets = _strategy.totalAssets();
         uint256 _balance = ERC20(_strategy.asset()).balanceOf(address(_strategy));
         uint256 _idle = _balance > _assets ? _assets : _balance;
