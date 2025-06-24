@@ -9,6 +9,10 @@ import {LiquityV2LBStrategy as Strategy, ERC20, AggregatorInterface, IAddressesR
 import {StrategyFactory} from "../../StrategyFactory.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IExchange} from "../../interfaces/IExchange.sol";
+import {ITroveManager} from "../../interfaces/ITroveManager.sol";
+
+import {ISortedTroves} from "../interfaces/ISortedTroves.sol";
+import {IHintHelpers} from "../interfaces/IHintHelpers.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -30,8 +34,18 @@ interface IFactory {
 contract Setup is Test, IEvents {
 
     // Token addresses used in the tests.
-    address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526; // Liquity WETH
     address public stybold = 0x23346B04a7f55b8760E5860AA5A77383D63491cD; // st-yBOLD
+    IStrategyInterface public lenderVault = IStrategyInterface(stybold);
+
+    // Liquity WETH
+    address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
+    address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526;
+    address public borrowerOperations = 0x372ABD1810eAF23Cb9D941BbE7596DFb2c46BC65;
+    address public troveManager = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
+    address public sortedTroves = 0xA25269E41BD072513849F2E64Ad221e84f3063F4;
+    uint256 public branchIndex = 0;
+    uint256 public liquidateCollateralFactor = 909090909090909090;
 
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
@@ -43,6 +57,7 @@ contract Setup is Test, IEvents {
     mapping(string => address) public tokenAddrs;
 
     // Addresses for different roles we will use repeatedly.
+    address public strategist = address(69);
     address public user = address(10);
     address public keeper = address(4);
     address public management = address(1);
@@ -56,12 +71,17 @@ contract Setup is Test, IEvents {
     uint256 public decimals;
     uint256 public MAX_BPS = 10_000;
 
-    // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount = 1e30;
+    // Fuzz from $0.01 of 1e6 stable coins up to 5k of a 1e18 coin
+    uint256 public maxFuzzAmount = 5_000 * 1e18;
     uint256 public minFuzzAmount = 10_000;
 
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;
+
+    // Constants from the Strategy
+    uint256 public constant ETH_GAS_COMPENSATION = 0.0375 ether;
+    uint256 public constant MIN_ANNUAL_INTEREST_RATE = 1e18 / 100 / 2; // 0.5%
+    uint256 public constant MIN_DEBT = 2_000 * 1e18;
 
     function setUp() public virtual {
         uint256 _blockNumber = 22_763_240; // Caching for faster tests
@@ -165,6 +185,83 @@ contract Setup is Test, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    }
+
+    function simulateEarningInterest() public {
+
+        // Airdrop some profit to st-yBOLD
+        airdrop(ERC20(lenderVault.asset()), address(lenderVault), 10_000 ether);
+
+        // Report profit
+        vm.prank(0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7); // SMS
+        lenderVault.report();
+
+        // Unlock profit
+        skip(1 days);
+
+        // Make sure oracles are updated
+        updateOracles();
+    }
+
+    // ===============================================================
+    // Liquity helpers
+    // ===============================================================
+
+    function strategistDepositAndOpenTrove(bool _strategistDeposit) public returns (uint256 _initialStrategistDeposit) {
+        // Amount strategist deposits after deployment to open a trove
+        _initialStrategistDeposit = 2 ether;
+
+        // Deposit into strategy
+        if (_strategistDeposit) mintAndDepositIntoStrategy(strategy, strategist, _initialStrategistDeposit);
+
+        // Approve gas compensation spending
+        airdrop(ERC20(tokenAddrs["WETH"]), management, ETH_GAS_COMPENSATION);
+        vm.prank(management);
+        ERC20(tokenAddrs["WETH"]).approve(address(strategy), ETH_GAS_COMPENSATION);
+
+        // Open Trove
+        (uint256 _upperHint, uint256 _lowerHint) = findHints();
+        vm.prank(management);
+        strategy.openTrove(_upperHint, _lowerHint);
+
+        return _initialStrategistDeposit;
+    }
+
+    function findHints() internal view returns (uint256 _upperHint, uint256 _lowerHint) {
+        // Find approx hint (off-chain)
+        (uint256 _approxHint,,) = IHintHelpers(hintHelpers).getApproxHint({
+            _collIndex: branchIndex,
+            _interestRate: MIN_ANNUAL_INTEREST_RATE,
+            _numTrials: sqrt(100 * ITroveManager(troveManager).getTroveIdsCount()),
+            _inputRandomSeed: block.timestamp
+        });
+
+        // Find concrete insert position (off-chain)
+        (_upperHint, _lowerHint) =
+            ISortedTroves(sortedTroves).findInsertPosition(MIN_ANNUAL_INTEREST_RATE, _approxHint, _approxHint);
+    }
+
+    function sqrt(uint256 y) private pure returns (uint256 z) {
+        if (y > 3) {
+            z = y;
+            uint256 x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
+        }
+    }
+
+    function updateOracles() public {
+        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
+        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
+        vm.mockCall(
+            address(oracle),
+            abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
+            abi.encode(roundId, answer, startedAt, block.timestamp, answeredInRound)
+        );
     }
 
 }

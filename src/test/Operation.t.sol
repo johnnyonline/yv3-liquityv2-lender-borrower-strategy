@@ -20,18 +20,27 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation(
-        uint256 _amount
-    ) public {
+    function test_operation(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        assertEq(strategy.totalAssets(), _amount, "!totalAssets");
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
 
         // Earn Interest
-        skip(1 days);
+        simulateEarningInterest();
 
         // Report profit
         vm.prank(keeper);
@@ -41,8 +50,6 @@ contract OperationTest is Setup {
         assertGe(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
-        skip(strategy.profitMaxUnlockTime());
-
         uint256 balanceBefore = asset.balanceOf(user);
 
         // Withdraw all funds
@@ -50,9 +57,28 @@ contract OperationTest is Setup {
         strategy.redeem(_amount, user, user);
 
         assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+
+        balanceBefore = asset.balanceOf(strategist);
+        uint256 wethBalanceBefore = ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management());
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Shutdown the strategy (can't repay entire debt without)
+        vm.startPrank(emergencyAdmin);
+        strategy.shutdownStrategy();
+        strategy.emergencyWithdraw(type(uint256).max);
+        vm.stopPrank();
+
+        // Strategist withdraws all funds
+        vm.prank(strategist);
+        strategy.redeem(strategistDeposit, strategist, strategist, 0);
+
+        assertGe(asset.balanceOf(strategist), balanceBefore + strategistDeposit, "!final balance");
+        assertEq(ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management()), wethBalanceBefore + ETH_GAS_COMPENSATION, "!weth balance");
     }
 
-    function test_profitableReport(uint256 _amount, uint16 _profitFactor) public {
+    function test_profitableReport(uint256 _amount, uint16 _profitFactor) public { // @todo -- here
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         _profitFactor = uint16(bound(uint256(_profitFactor), 10, MAX_BPS));
 

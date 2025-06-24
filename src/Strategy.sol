@@ -10,7 +10,7 @@ import {IVaultAPROracle} from "./interfaces/IVaultAPROracle.sol";
 import {IAddressesRegistry, IBorrowerOperations, ITroveManager} from "./interfaces/IAddressesRegistry.sol";
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
-
+import "forge-std/console2.sol";
 contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     using SafeERC20 for ERC20;
@@ -106,7 +106,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
-        WETH.forceApprove(address(BORROWER_OPERATIONS), ETH_GAS_COMPENSATION);
+        if (asset != WETH) WETH.forceApprove(address(BORROWER_OPERATIONS), ETH_GAS_COMPENSATION);
     }
 
     // ===============================================================
@@ -137,6 +137,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             address(0), // removeManager
             address(0) // receiver
         );
+        // uint256 _borrowed = ERC20(borrowToken).balanceOf(address(this));
+        // _lendBorrowToken(_borrowed);
         // @todo addManager/removeManager -- SMS, so can adjustZombieTrove? -- just add a function here
     }
 
@@ -301,7 +303,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _withdrawBorrowToken(
         uint256 amount
     ) internal override {
-        uint256 shares = Math.min(lenderVault.previewWithdraw(amount), lenderVault.balanceOf(address(this)));
+        uint256 shares = Math.min(lenderVault.previewWithdraw(amount), STAKED_LENDER_VAULT.previewRedeem(STAKED_LENDER_VAULT.balanceOf(address(this))));
         shares = STAKED_LENDER_VAULT.previewWithdraw(shares);
         shares = STAKED_LENDER_VAULT.redeem(shares, address(this), address(this));
         lenderVault.redeem(shares, address(this), address(this));
@@ -393,7 +395,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         if (TROVE_MANAGER.getTroveStatus(_troveId) == ITroveManager.Status.active) {
             BORROWER_OPERATIONS.closeTrove(_troveId);
             uint256 _balance = WETH.balanceOf(address(this));
-            if (_balance > 0) WETH.safeTransfer(TokenizedStrategy.management(), _balance);
+            if (_balance > ETH_GAS_COMPENSATION) WETH.safeTransfer(TokenizedStrategy.management(), ETH_GAS_COMPENSATION);
         }
     }
 
