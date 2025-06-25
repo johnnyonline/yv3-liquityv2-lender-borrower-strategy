@@ -19,6 +19,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // Storage
     // ===============================================================
 
+    /// @notice If true, `getNetBorrowApr()` will return 0,
+    ///         which means we'll always consider it profitable to borrow
+    bool public forceLeverage;
+
     /// @notice Trove ID
     uint256 public troveId;
 
@@ -95,6 +99,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     {
         require(_exchange.TOKEN() == borrowToken && _exchange.PAIRED_WITH() == address(asset), "!exchange");
 
+        forceLeverage = true;
+
         BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
         TROVE_MANAGER = _addressesRegistry.troveManager();
         PRICE_FEED = address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
@@ -137,9 +143,12 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             address(0), // removeManager
             address(0) // receiver
         );
-        // uint256 _borrowed = ERC20(borrowToken).balanceOf(address(this));
-        // _lendBorrowToken(_borrowed);
+
+        uint256 _borrowTokenBalance = balanceOfBorrowToken();
+        require(_borrowTokenBalance >= MIN_DEBT, "!debt");
+        _lendBorrowToken(_borrowTokenBalance);
         // @todo addManager/removeManager -- SMS, so can adjustZombieTrove? -- just add a function here
+        // @todo -- set IR?
     }
 
     /// @notice Claim remaining collateral from a liquidation
@@ -164,6 +173,14 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     ) external onlyManagement {
         require(_dustThreshold >= MIN_DUST_THRESHOLD, "!minDust");
         dustThreshold = _dustThreshold;
+    }
+
+    /// @notice Set the forceLeverage flag
+    /// @param _forceLeverage The new value for the forceLeverage flag
+    function setForceLeverage(
+        bool _forceLeverage
+    ) external onlyManagement {
+        forceLeverage = _forceLeverage;
     }
 
     /// @notice Sweep of non-asset ERC20 tokens to governance
@@ -213,6 +230,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _repay(
         uint256 _amount
     ) internal override {
+        uint256 _debt = balanceOfDebt();
+        if (_debt - _amount < MIN_DEBT) _amount = _debt - MIN_DEBT;
         if (_amount > 0) BORROWER_OPERATIONS.repayBold(troveId, _amount);
     }
 
@@ -239,7 +258,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @inheritdoc BaseLenderBorrower
     function _isLiquidatable() internal view override returns (bool) {
-        return TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset))) < BORROWER_OPERATIONS.MCR();
+        return TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * DECIMALS_DIFF) < BORROWER_OPERATIONS.MCR();
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -255,8 +274,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @inheritdoc BaseLenderBorrower
     function getNetBorrowApr(
         uint256 /*_newAmount*/
-    ) public pure override returns (uint256) {
-        return MIN_ANNUAL_INTEREST_RATE;
+    ) public view override returns (uint256) {
+        return forceLeverage ? 0 : MIN_ANNUAL_INTEREST_RATE;
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -393,6 +412,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
         uint256 _troveId = troveId;
         if (TROVE_MANAGER.getTroveStatus(_troveId) == ITroveManager.Status.active) {
+            console2.log("debt balance: ", balanceOfDebt());
+            console2.log("borrow token balance: ", balanceOfBorrowToken());
             BORROWER_OPERATIONS.closeTrove(_troveId);
             uint256 _balance = WETH.balanceOf(address(this));
             if (_balance > ETH_GAS_COMPENSATION) WETH.safeTransfer(TokenizedStrategy.management(), ETH_GAS_COMPENSATION);

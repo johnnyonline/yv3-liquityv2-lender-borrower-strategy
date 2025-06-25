@@ -9,6 +9,7 @@ interface IStrategyInterface is ILenderBorrower {
     // Storage
     // ===============================================================
 
+    function forceLeverage() external view returns (bool);
     function troveId() external view returns (uint256);
     function dustThreshold() external view returns (uint256);
 
@@ -32,6 +33,7 @@ interface IStrategyInterface is ILenderBorrower {
     function claimCollateral() external;
     function buyBorrowToken(uint256 _amount) external;
     function setDustThreshold(uint256 _dustThreshold) external;
+    function setForceLeverage(bool _forceLeverage) external;
     function sweep(address _token) external;
 
     // ===============================================================

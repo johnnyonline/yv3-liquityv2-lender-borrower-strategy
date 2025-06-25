@@ -71,8 +71,8 @@ contract Setup is Test, IEvents {
     uint256 public decimals;
     uint256 public MAX_BPS = 10_000;
 
-    // Fuzz from $0.01 of 1e6 stable coins up to 5k of a 1e18 coin
-    uint256 public maxFuzzAmount = 5_000 * 1e18;
+    // Fuzz from $0.01 of 1e6 stable coins up to 100 of a 1e18 coin
+    uint256 public maxFuzzAmount = 100 * 1e18;
     uint256 public minFuzzAmount = 10_000;
 
     // Default profit max unlock time is set for 10 days
@@ -190,14 +190,14 @@ contract Setup is Test, IEvents {
     function simulateEarningInterest() public {
 
         // Airdrop some profit to st-yBOLD
-        airdrop(ERC20(lenderVault.asset()), address(lenderVault), 10_000 ether);
+        airdrop(ERC20(lenderVault.asset()), address(lenderVault), 100_000 ether);
 
         // Report profit
         vm.prank(0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7); // SMS
         lenderVault.report();
 
         // Unlock profit
-        skip(1 days);
+        skip(lenderVault.profitMaxUnlockTime());
 
         // Make sure oracles are updated
         updateOracles();
@@ -261,6 +261,17 @@ contract Setup is Test, IEvents {
             address(oracle),
             abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
             abi.encode(roundId, answer, startedAt, block.timestamp, answeredInRound)
+        );
+    }
+
+    function dropCollateralPrice() public {
+        // Drop the collateral price to 50% of the current price
+        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
+        int256 answer = oracle.latestAnswer();
+        vm.mockCall(
+            address(oracle),
+            abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector),
+            abi.encode(answer * 70 / 100) // 30% drop
         );
     }
 
