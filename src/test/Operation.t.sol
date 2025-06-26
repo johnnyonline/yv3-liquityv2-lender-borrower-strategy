@@ -21,7 +21,9 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation(uint256 _amount) public {
+    function test_operation(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Set protocol fee to 0 and perf fee to 0
@@ -86,7 +88,9 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, 0, 0, 0);
     }
 
-    function test_profitableReport_withFees(uint256 _amount) public {
+    function test_profitableReport_withFees(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Set protocol fee to 0 and perf fee to 10%
@@ -161,7 +165,41 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, 0, 0, 0);
     }
 
-    function test_tendTrigger(uint256 _amount) public {
+    function test_operation_overWarningLTV_depositLeversDown(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        // Withdrawl some collateral to pump LTV
+        uint256 collToSell = strategy.balanceOfCollateral() * 20 / 100;
+        vm.prank(emergencyAdmin);
+        strategy.manualWithdraw(address(0), collToSell);
+
+        uint256 warningLTV = (strategy.getLiquidateCollateralFactor() * strategy.warningLTVMultiplier()) / MAX_BPS;
+
+        assertGt(strategy.getCurrentLTV(), warningLTV);
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+    }
+
+    function test_tendTrigger(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // No assets should be false
@@ -256,11 +294,7 @@ contract OperationTest is Setup {
         assertTrue(!trigger);
 
         // (almost) zero out rewards
-        vm.mockCall(
-            address(strategy.VAULT_APR_ORACLE()),
-            abi.encodeWithSelector(IVaultAPROracle.getStrategyApr.selector),
-            abi.encode(1)
-        );
+        vm.mockCall(address(strategy.VAULT_APR_ORACLE()), abi.encodeWithSelector(IVaultAPROracle.getStrategyApr.selector), abi.encode(1));
         assertEq(strategy.getNetRewardApr(0), 1);
 
         vm.prank(management);
@@ -284,6 +318,269 @@ contract OperationTest is Setup {
         strategy.setForceLeverage(false);
     }
 
-    // function test_operation_overWarningLTV_depositLeversDown // @todo -- here
+    function test_operation_redemptionToZombie(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Simulate a redemption that leads to a zombie trove
+        simulateCollateralRedemption(strategy.balanceOfDebt() * 10, true);
+
+        // Check debt decreased
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+        assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
+
+        // Rewards to sell
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "sellRewards");
+
+        // Sell the rewards
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the rewards
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellRewards");
+
+        // Report profit (doesn't leverage)
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit"); // If no price swinges / other costs, being redeemed is actually profitable
+        assertEq(loss, 0, "!loss");
+        assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
+
+        // Get our trove out from zombie mode
+        (uint256 _upperHint, uint256 _lowerHint) = findHints();
+        vm.prank(keeper);
+        strategy.adjustZombieTrove(_upperHint, _lowerHint);
+
+        vm.prank(keeper);
+        vm.expectRevert("!zombie");
+        strategy.adjustZombieTrove(_upperHint, _lowerHint);
+
+        // Now need to leverage
+        (trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "leverage");
+
+        // Leverage up
+        vm.prank(keeper);
+        strategy.tend();
+
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Report profit
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+    }
+
+    function test_operation_redemptionNoZombie(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Simulate a redemption that doesnt lead to a zombie trove
+        simulateCollateralRedemption(strategy.balanceOfDebt() / 10, false);
+
+        // Check debt decreased
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+
+        // Rewards to sell
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "sellRewards");
+
+        // Sell the rewards
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the rewards
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellRewards");
+
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+    }
+
+    function test_operation_redemption_withLoss(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Simulate a redemption that doesnt lead to a zombie trove
+        simulateCollateralRedemption(strategy.balanceOfDebt() / 10, false);
+
+        // Check debt decreased
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+
+        // Rewards to sell
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "sellRewards");
+
+        // Get rid of some borrow token to simulate a loss
+        vm.startPrank(address(strategy));
+        ERC20(strategy.borrowToken()).transfer(address(6969), ERC20(strategy.borrowToken()).balanceOf(address(strategy)) * 90 / 100);
+        vm.stopPrank();
+
+        // Sell the rewards
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the rewards
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellRewards");
+
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+
+        // Set health check to accept loss
+        vm.prank(management);
+        strategy.setLossLimitRatio(5_000); // 50% loss
+
+        // Report loss
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertEq(profit, 0, "!profit");
+        assertGt(loss, 0, "!loss");
+    }
+
+    function test_operation_liquidation(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        // Simulate a liquidation
+        simulateLiquidation();
+
+        // Check position
+        assertEq(strategy.balanceOfDebt(), 0, "!debt");
+        assertEq(strategy.balanceOfCollateral(), 0, "!collateral");
+
+        // Sell all borrow token
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "sellRewards");
+
+        // Sell the rewards
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the borrow token
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellRewards");
+
+        // Set health check to accept loss
+        vm.prank(management);
+        strategy.setLossLimitRatio(5_000); // 50% loss
+
+        // Report loss
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertEq(profit, 0, "!profit");
+        assertGt(loss, 0, "!loss");
+
+        // Shutdown the strategy
+        vm.startPrank(emergencyAdmin);
+        strategy.shutdownStrategy();
+        strategy.emergencyWithdraw(type(uint256).max);
+        vm.stopPrank();
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        // Strategist withdraws all funds
+        vm.prank(strategist);
+        strategy.redeem(strategistDeposit, strategist, strategist, 0);
+
+        checkStrategyTotals(strategy, 0, 0, 0);
+    }
 
 }

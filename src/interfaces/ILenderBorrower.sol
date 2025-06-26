@@ -4,6 +4,7 @@ pragma solidity 0.8.23;
 import {IBaseHealthCheck} from "@periphery/Bases/HealthCheck/IBaseHealthCheck.sol";
 
 interface ILenderBorrower is IBaseHealthCheck {
+
     // Public Variables
     function borrowToken() external view returns (address);
 
@@ -22,22 +23,34 @@ interface ILenderBorrower is IBaseHealthCheck {
     function minAmountToBorrow() external view returns (uint256);
 
     // External Functions
-    function setDepositLimit(uint256 _depositLimit) external;
+    function setDepositLimit(
+        uint256 _depositLimit
+    ) external;
 
     function setLtvMultipliers(uint16 _targetLTVMultiplier, uint16 _warningLTVMultiplier) external;
 
-    function setLeaveDebtBehind(bool _leaveDebtBehind) external;
+    function setLeaveDebtBehind(
+        bool _leaveDebtBehind
+    ) external;
 
-    function setMaxGasPriceToTend(uint256 _maxGasPriceToTend) external;
+    function setMaxGasPriceToTend(
+        uint256 _maxGasPriceToTend
+    ) external;
 
-    function setSlippage(uint256 _slippage) external;
+    function setSlippage(
+        uint256 _slippage
+    ) external;
 
     // Public View Functions
     function getCurrentLTV() external view returns (uint256);
 
-    function getNetBorrowApr(uint256 newAmount) external view returns (uint256);
+    function getNetBorrowApr(
+        uint256 newAmount
+    ) external view returns (uint256);
 
-    function getNetRewardApr(uint256 newAmount) external view returns (uint256);
+    function getNetRewardApr(
+        uint256 newAmount
+    ) external view returns (uint256);
 
     function getLiquidateCollateralFactor() external view returns (uint256);
 
@@ -56,9 +69,12 @@ interface ILenderBorrower is IBaseHealthCheck {
     // Emergency Functions
     function claimAndSellRewards() external;
 
-    function sellBorrowToken(uint256 _amount) external;
+    function sellBorrowToken(
+        uint256 _amount
+    ) external;
 
     function manualWithdraw(address _token, uint256 _amount) external;
 
     function manualRepayDebt() external;
+
 }

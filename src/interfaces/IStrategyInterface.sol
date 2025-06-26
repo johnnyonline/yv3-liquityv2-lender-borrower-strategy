@@ -30,15 +30,24 @@ interface IStrategyInterface is ILenderBorrower {
     // ===============================================================
 
     function openTrove(uint256 _upperHint, uint256 _lowerHint) external;
-    function claimCollateral() external;
-    function buyBorrowToken(uint256 _amount) external;
-    function setDustThreshold(uint256 _dustThreshold) external;
-    function setForceLeverage(bool _forceLeverage) external;
-    function sweep(address _token) external;
+    function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external;
+    function buyBorrowToken(
+        uint256 _amount
+    ) external;
+    function setDustThreshold(
+        uint256 _dustThreshold
+    ) external;
+    function setForceLeverage(
+        bool _forceLeverage
+    ) external;
+    function sweep(
+        address _token
+    ) external;
 
     // ===============================================================
     // View functions
     // ===============================================================
 
     function isRewardsToClaim() external view returns (bool);
+
 }

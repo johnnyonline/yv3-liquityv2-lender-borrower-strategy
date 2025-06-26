@@ -11,6 +11,7 @@ import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IExchange} from "../../interfaces/IExchange.sol";
 import {ITroveManager} from "../../interfaces/ITroveManager.sol";
 
+import {ICollateralRegistry} from "../interfaces/ICollateralRegistry.sol";
 import {ISortedTroves} from "../interfaces/ISortedTroves.sol";
 import {IHintHelpers} from "../interfaces/IHintHelpers.sol";
 
@@ -188,7 +189,6 @@ contract Setup is Test, IEvents {
     }
 
     function simulateEarningInterest() public {
-
         // Airdrop some profit to st-yBOLD
         airdrop(ERC20(lenderVault.asset()), address(lenderVault), 100_000 ether);
 
@@ -207,7 +207,9 @@ contract Setup is Test, IEvents {
     // Liquity helpers
     // ===============================================================
 
-    function strategistDepositAndOpenTrove(bool _strategistDeposit) public returns (uint256 _initialStrategistDeposit) {
+    function strategistDepositAndOpenTrove(
+        bool _strategistDeposit
+    ) public returns (uint256 _initialStrategistDeposit) {
         // Amount strategist deposits after deployment to open a trove
         _initialStrategistDeposit = 2 ether;
 
@@ -237,11 +239,12 @@ contract Setup is Test, IEvents {
         });
 
         // Find concrete insert position (off-chain)
-        (_upperHint, _lowerHint) =
-            ISortedTroves(sortedTroves).findInsertPosition(MIN_ANNUAL_INTEREST_RATE, _approxHint, _approxHint);
+        (_upperHint, _lowerHint) = ISortedTroves(sortedTroves).findInsertPosition(MIN_ANNUAL_INTEREST_RATE, _approxHint, _approxHint);
     }
 
-    function sqrt(uint256 y) private pure returns (uint256 z) {
+    function sqrt(
+        uint256 y
+    ) private pure returns (uint256 z) {
         if (y > 3) {
             z = y;
             uint256 x = y / 2 + 1;
@@ -265,13 +268,48 @@ contract Setup is Test, IEvents {
     }
 
     function dropCollateralPrice() public {
-        // Drop the collateral price to 50% of the current price
         AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         int256 answer = oracle.latestAnswer();
+        int256 newAnswer = answer * 70 / 100; // 30% drop
         vm.mockCall(
             address(oracle),
             abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector),
-            abi.encode(answer * 70 / 100) // 30% drop
+            abi.encode(newAnswer) // 30% drop
+        );
+
+        (uint80 roundId,, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
+        vm.mockCall(
+            address(oracle),
+            abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
+            abi.encode(roundId, newAnswer, startedAt, block.timestamp, answeredInRound)
+        );
+    }
+
+    function simulateCollateralRedemption(uint256 _amount, bool _zombie) internal {
+        address _redeemer = address(420420);
+        airdrop(ERC20(strategy.borrowToken()), _redeemer, _amount);
+        vm.prank(_redeemer);
+        ICollateralRegistry(collateralRegistry).redeemCollateral(
+            _amount,
+            0, // max iterations
+            1_000_000_000_000_000_000 // max fee percentage
+        );
+        if (_zombie) {
+            require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.zombie), "Trove not zombie");
+        } else {
+            require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.active), "Trove not active");
+        }
+    }
+
+    function simulateLiquidation() internal {
+        require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.active), "Trove not active");
+        dropCollateralPrice();
+        uint256[] memory troveArray = new uint256[](1);
+        troveArray[0] = strategy.troveId();
+        ITroveManager(troveManager).batchLiquidateTroves(troveArray);
+        require(
+            uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.closedByLiquidation),
+            "Trove not liquidated"
         );
     }
 
