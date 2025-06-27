@@ -16,7 +16,7 @@ contract ETHToBOLDExchange is IExchange {
     // ===============================================================
 
     /// @notice Address of SMS on Mainnet
-    address private constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
+    address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
 
     /// @notice BOLD/USDC Curve Pool
     int128 private constant BOLD_INDEX_BOLD_USDC_CURVE_POOL = 0;
@@ -80,7 +80,7 @@ contract ETHToBOLDExchange is IExchange {
     function sweep(
         IERC20 _token
     ) external {
-        require(msg.sender == SMS, "!SMS");
+        require(msg.sender == SMS, "!caller");
         uint256 _balance = _token.balanceOf(address(this));
         require(_balance > 0, "!balance");
         _token.safeTransfer(SMS, _balance);
@@ -100,7 +100,11 @@ contract ETHToBOLDExchange is IExchange {
 
         // BOLD --> USDC
         uint256 _amountOut = BOLD_USDC_CURVE_POOL.exchange(
-            BOLD_INDEX_BOLD_USDC_CURVE_POOL, USDC_INDEX_BOLD_USDC_CURVE_POOL, _amount, _minAmount, address(this)
+            BOLD_INDEX_BOLD_USDC_CURVE_POOL,
+            USDC_INDEX_BOLD_USDC_CURVE_POOL,
+            _amount,
+            0, // minAmount
+            address(this)
         );
 
         // USDC --> ETH
@@ -108,7 +112,7 @@ contract ETHToBOLDExchange is IExchange {
             USDC_INDEX_USDC_WETH_POOL,
             WETH_INDEX_USDC_WETH_POOL,
             _amountOut,
-            _minAmount,
+            0, // minAmount
             false, // use_eth
             msg.sender
         );
@@ -131,14 +135,18 @@ contract ETHToBOLDExchange is IExchange {
             WETH_INDEX_USDC_WETH_POOL,
             USDC_INDEX_USDC_WETH_POOL,
             _amount,
-            _minAmount,
+            0, // minAmount
             false, // use_eth
             address(this)
         );
 
         // USDC --> BOLD
         _amountOut = BOLD_USDC_CURVE_POOL.exchange(
-            USDC_INDEX_BOLD_USDC_CURVE_POOL, BOLD_INDEX_BOLD_USDC_CURVE_POOL, _amountOut, _minAmount, msg.sender
+            USDC_INDEX_BOLD_USDC_CURVE_POOL,
+            BOLD_INDEX_BOLD_USDC_CURVE_POOL,
+            _amountOut,
+            0, // minAmount
+            msg.sender
         );
 
         require(_amountOut >= _minAmount, "slippage rekt you");
