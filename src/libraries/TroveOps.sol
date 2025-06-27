@@ -33,6 +33,14 @@ library TroveOps {
     // Write functions
     // ===============================================================
 
+    /// @notice Opens a trove with the given parameters
+    /// @dev Requires the caller to pay the gas compensation in WETH
+    /// @dev Should be called through a private RPC to avoid fee slippage
+    /// @param _borrowerOperations The borrower operations contract
+    /// @param _collAmount The amount of collateral to deposit
+    /// @param _upperHint The upper hint for the trove
+    /// @param _lowerHint The lower hint for the trove
+    /// @return The ID of the newly opened trove
     function openTrove(
         IBorrowerOperations _borrowerOperations,
         uint256 _collAmount,
@@ -55,6 +63,14 @@ library TroveOps {
         );
     }
 
+    /// @notice Adjust the interest rate of the trove
+    /// @dev Will fail if the trove is not active
+    /// @dev Should be called through a private RPC to avoid fee slippage
+    /// @param _borrowerOperations The borrower operations contract
+    /// @param _troveId The ID of the trove to adjust
+    /// @param _newAnnualInterestRate New annual interest rate
+    /// @param _upperHint Upper hint
+    /// @param _lowerHint Lower hint
     function adjustTroveInterestRate(
         IBorrowerOperations _borrowerOperations,
         uint256 _troveId,
@@ -71,6 +87,16 @@ library TroveOps {
         );
     }
 
+    /// @notice Adjust zombie trove
+    /// @dev Might need to be called after a redemption, if our debt is below `MIN_DEBT`
+    /// @dev Will fail if the trove is not in zombie mode
+    /// @dev Should be called through a private RPC to avoid fee slippage
+    /// @param _borrowerOperations The borrower operations contract
+    /// @param _troveId The ID of the trove to adjust
+    /// @param _balanceOfAsset Balance of asset
+    /// @param _balanceOfDebt Balance of debt
+    /// @param _upperHint Upper hint
+    /// @param _lowerHint Lower hint
     function adjustZombieTrove(
         IBorrowerOperations _borrowerOperations,
         uint256 _troveId,
@@ -91,6 +117,13 @@ library TroveOps {
         );
     }
 
+    /// @notice Close the trove if it's active or try to claim leftover collateral if we were liquidated
+    /// @dev `_management` will get back the ETH gas compensation if we're closing the trove
+    /// @param _troveManager The trove manager contract
+    /// @param _borrowerOperations The borrower operations contract
+    /// @param _borrowerOperations The collateral surplus pool contract
+    /// @param _management The management address
+    /// @param _troveId The ID of the trove
     function onEmergencyWithdraw(
         ITroveManager _troveManager,
         IBorrowerOperations _borrowerOperations,

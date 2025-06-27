@@ -59,20 +59,9 @@ contract OwnerTest is Setup {
     function test_setDustThreshold(
         uint256 _newDustThreshold
     ) public {
-        vm.assume(_newDustThreshold >= strategy.MIN_DUST_THRESHOLD());
-        assertEq(strategy.dustThreshold(), strategy.MIN_DUST_THRESHOLD());
         vm.prank(management);
         strategy.setDustThreshold(_newDustThreshold);
         assertEq(strategy.dustThreshold(), _newDustThreshold);
-    }
-
-    function test_setDustThreshold_belowMin(
-        uint256 _newDustThreshold
-    ) public {
-        vm.assume(_newDustThreshold < strategy.MIN_DUST_THRESHOLD());
-        vm.expectRevert("!minDust");
-        vm.prank(management);
-        strategy.setDustThreshold(_newDustThreshold);
     }
 
     function test_setDustThreshold_wrongCaller(

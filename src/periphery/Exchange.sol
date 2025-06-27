@@ -104,7 +104,7 @@ contract ETHToBOLDExchange is IExchange {
             USDC_INDEX_BOLD_USDC_CURVE_POOL,
             _amount,
             0, // minAmount
-            address(this)
+            address(this) // receiver
         );
 
         // USDC --> ETH
@@ -114,7 +114,7 @@ contract ETHToBOLDExchange is IExchange {
             _amountOut,
             0, // minAmount
             false, // use_eth
-            msg.sender
+            msg.sender // receiver
         );
 
         require(_amountOut >= _minAmount, "slippage rekt you");
@@ -137,7 +137,7 @@ contract ETHToBOLDExchange is IExchange {
             _amount,
             0, // minAmount
             false, // use_eth
-            address(this)
+            address(this) // receiver
         );
 
         // USDC --> BOLD
@@ -146,7 +146,7 @@ contract ETHToBOLDExchange is IExchange {
             BOLD_INDEX_BOLD_USDC_CURVE_POOL,
             _amountOut,
             0, // minAmount
-            msg.sender
+            msg.sender // receiver
         );
 
         require(_amountOut >= _minAmount, "slippage rekt you");

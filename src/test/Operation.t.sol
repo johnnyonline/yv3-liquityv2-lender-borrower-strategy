@@ -31,7 +31,6 @@ contract OperationTest is Setup {
         assertEq(strategy.borrowToken(), IStrategyInterface(strategy.lenderVault()).asset());
         assertTrue(strategy.forceLeverage());
         assertEq(strategy.troveId(), 0);
-        assertEq(strategy.dustThreshold(), strategy.MIN_DUST_THRESHOLD());
         assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
         assertEq(strategy.TROVE_MANAGER(), troveManager);
         assertEq(strategy.EXCHANGE(), address(exchange));
@@ -444,10 +443,6 @@ contract OperationTest is Setup {
         // Get our trove out from zombie mode
         (uint256 _upperHint, uint256 _lowerHint) = findHints();
         vm.prank(keeper);
-        strategy.adjustZombieTrove(_upperHint, _lowerHint);
-
-        vm.prank(keeper);
-        vm.expectRevert("!zombie");
         strategy.adjustZombieTrove(_upperHint, _lowerHint);
 
         // Now need to leverage
