@@ -17,7 +17,9 @@ contract ExchangeTest is Setup {
         assertEq(exchange.PAIRED_WITH(), strategy.asset());
     }
 
-    function test_swapFrom(uint256 _amount) public {
+    function test_swapFrom(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         airdrop(ERC20(exchange.TOKEN()), user, _amount);
@@ -41,7 +43,9 @@ contract ExchangeTest is Setup {
         assertEq(ERC20(exchange.PAIRED_WITH()).balanceOf(address(exchange)), 0);
     }
 
-    function test_swapTo(uint256 _amount) public {
+    function test_swapTo(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         airdrop(ERC20(exchange.PAIRED_WITH()), user, _amount);
@@ -65,7 +69,9 @@ contract ExchangeTest is Setup {
         assertEq(ERC20(exchange.PAIRED_WITH()).balanceOf(address(exchange)), 0);
     }
 
-    function test_sweep(uint256 _amount) public {
+    function test_sweep(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         airdrop(ERC20(exchange.TOKEN()), address(exchange), _amount);
@@ -83,7 +89,9 @@ contract ExchangeTest is Setup {
         assertEq(ERC20(exchange.TOKEN()).balanceOf(address(exchange)), 0);
     }
 
-    function test_sweep_wrongCaller(address _wrongCaller) public {
+    function test_sweep_wrongCaller(
+        address _wrongCaller
+    ) public {
         vm.assume(_wrongCaller != exchange.SMS());
 
         ERC20 token = ERC20(exchange.TOKEN());
@@ -94,4 +102,5 @@ contract ExchangeTest is Setup {
         vm.prank(_wrongCaller);
         exchange.sweep(token);
     }
+
 }

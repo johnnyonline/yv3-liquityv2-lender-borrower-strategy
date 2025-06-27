@@ -9,6 +9,8 @@ interface IExchange {
     function TOKEN() external view returns (address);
     function PAIRED_WITH() external view returns (address);
     function swap(uint256 amount, uint256 minAmount, bool fromBorrow) external returns (uint256);
-    function sweep(IERC20 _token) external;
+    function sweep(
+        IERC20 _token
+    ) external;
 
 }
