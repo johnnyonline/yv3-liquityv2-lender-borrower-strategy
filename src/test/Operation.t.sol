@@ -83,7 +83,11 @@ contract OperationTest is Setup {
         strategy.redeem(strategistDeposit, strategist, strategist, 0);
 
         assertGt(asset.balanceOf(strategist), balanceBefore + strategistDeposit, "!final balance");
-        assertEq(ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management()), wethBalanceBefore + ETH_GAS_COMPENSATION, "!weth balance");
+        assertEq(
+            ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management()),
+            wethBalanceBefore + ETH_GAS_COMPENSATION,
+            "!weth balance"
+        );
 
         checkStrategyTotals(strategy, 0, 0, 0);
     }
@@ -160,7 +164,11 @@ contract OperationTest is Setup {
         strategy.redeem(strategistDeposit, strategist, strategist, 0);
 
         assertGt(asset.balanceOf(strategist), balanceBefore + strategistDeposit, "!final balance");
-        assertEq(ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management()), wethBalanceBefore + ETH_GAS_COMPENSATION, "!weth balance");
+        assertEq(
+            ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management()),
+            wethBalanceBefore + ETH_GAS_COMPENSATION,
+            "!weth balance"
+        );
 
         checkStrategyTotals(strategy, 0, 0, 0);
     }
@@ -294,7 +302,11 @@ contract OperationTest is Setup {
         assertTrue(!trigger);
 
         // (almost) zero out rewards
-        vm.mockCall(address(strategy.VAULT_APR_ORACLE()), abi.encodeWithSelector(IVaultAPROracle.getStrategyApr.selector), abi.encode(1));
+        vm.mockCall(
+            address(strategy.VAULT_APR_ORACLE()),
+            abi.encodeWithSelector(IVaultAPROracle.getStrategyApr.selector),
+            abi.encode(1)
+        );
         assertEq(strategy.getNetRewardApr(0), 1);
 
         vm.prank(management);
@@ -488,7 +500,9 @@ contract OperationTest is Setup {
 
         // Get rid of some borrow token to simulate a loss
         vm.startPrank(address(strategy));
-        ERC20(strategy.borrowToken()).transfer(address(6969), ERC20(strategy.borrowToken()).balanceOf(address(strategy)) * 90 / 100);
+        ERC20(strategy.borrowToken()).transfer(
+            address(6969), ERC20(strategy.borrowToken()).balanceOf(address(strategy)) * 90 / 100
+        );
         vm.stopPrank();
 
         // Sell the rewards

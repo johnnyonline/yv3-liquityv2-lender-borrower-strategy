@@ -21,7 +21,8 @@ contract ETHToBOLDExchange is IExchange {
     /// @notice BOLD/USDC Curve Pool
     int128 private constant BOLD_INDEX_BOLD_USDC_CURVE_POOL = 0;
     int128 private constant USDC_INDEX_BOLD_USDC_CURVE_POOL = 1;
-    ICurveStableSwapNG private constant BOLD_USDC_CURVE_POOL = ICurveStableSwapNG(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
+    ICurveStableSwapNG private constant BOLD_USDC_CURVE_POOL =
+        ICurveStableSwapNG(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
 
     /// @notice WETH/USDC Curve Pool
     uint256 private constant USDC_INDEX_USDC_WETH_POOL = 0;
@@ -98,8 +99,9 @@ contract ETHToBOLDExchange is IExchange {
         BOLD.safeTransferFrom(msg.sender, address(this), _amount);
 
         // BOLD --> USDC
-        uint256 _amountOut =
-            BOLD_USDC_CURVE_POOL.exchange(BOLD_INDEX_BOLD_USDC_CURVE_POOL, USDC_INDEX_BOLD_USDC_CURVE_POOL, _amount, _minAmount, address(this));
+        uint256 _amountOut = BOLD_USDC_CURVE_POOL.exchange(
+            BOLD_INDEX_BOLD_USDC_CURVE_POOL, USDC_INDEX_BOLD_USDC_CURVE_POOL, _amount, _minAmount, address(this)
+        );
 
         // USDC --> ETH
         _amountOut = TRICRYPTO.exchange(
@@ -135,8 +137,9 @@ contract ETHToBOLDExchange is IExchange {
         );
 
         // USDC --> BOLD
-        _amountOut =
-            BOLD_USDC_CURVE_POOL.exchange(USDC_INDEX_BOLD_USDC_CURVE_POOL, BOLD_INDEX_BOLD_USDC_CURVE_POOL, _amountOut, _minAmount, msg.sender);
+        _amountOut = BOLD_USDC_CURVE_POOL.exchange(
+            USDC_INDEX_BOLD_USDC_CURVE_POOL, BOLD_INDEX_BOLD_USDC_CURVE_POOL, _amountOut, _minAmount, msg.sender
+        );
 
         require(_amountOut >= _minAmount, "slippage rekt you");
 

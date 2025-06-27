@@ -5,7 +5,14 @@ import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {ETHToBOLDExchange as Exchange} from "../../periphery/Exchange.sol";
-import {LiquityV2LBStrategy as Strategy, ERC20, AggregatorInterface, IAddressesRegistry, IExchange, IStrategy} from "../../Strategy.sol";
+import {
+    LiquityV2LBStrategy as Strategy,
+    ERC20,
+    AggregatorInterface,
+    IAddressesRegistry,
+    IExchange,
+    IStrategy
+} from "../../Strategy.sol";
 import {StrategyFactory} from "../../StrategyFactory.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IExchange} from "../../interfaces/IExchange.sol";
@@ -148,7 +155,12 @@ contract Setup is Test, IEvents {
     }
 
     // For checking the amounts in the strategy
-    function checkStrategyTotals(IStrategyInterface _strategy, uint256 _totalAssets, uint256 _totalDebt, uint256 _totalIdle) public {
+    function checkStrategyTotals(
+        IStrategyInterface _strategy,
+        uint256 _totalAssets,
+        uint256 _totalDebt,
+        uint256 _totalIdle
+    ) public {
         uint256 _assets = _strategy.totalAssets();
         uint256 _balance = ERC20(_strategy.asset()).balanceOf(address(_strategy));
         uint256 _idle = _balance > _assets ? _assets : _balance;
@@ -239,7 +251,8 @@ contract Setup is Test, IEvents {
         });
 
         // Find concrete insert position (off-chain)
-        (_upperHint, _lowerHint) = ISortedTroves(sortedTroves).findInsertPosition(MIN_ANNUAL_INTEREST_RATE, _approxHint, _approxHint);
+        (_upperHint, _lowerHint) =
+            ISortedTroves(sortedTroves).findInsertPosition(MIN_ANNUAL_INTEREST_RATE, _approxHint, _approxHint);
     }
 
     function sqrt(
@@ -295,20 +308,32 @@ contract Setup is Test, IEvents {
             1_000_000_000_000_000_000 // max fee percentage
         );
         if (_zombie) {
-            require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.zombie), "Trove not zombie");
+            require(
+                uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId()))
+                    == uint8(ITroveManager.Status.zombie),
+                "Trove not zombie"
+            );
         } else {
-            require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.active), "Trove not active");
+            require(
+                uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId()))
+                    == uint8(ITroveManager.Status.active),
+                "Trove not active"
+            );
         }
     }
 
     function simulateLiquidation() internal {
-        require(uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.active), "Trove not active");
+        require(
+            uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.active),
+            "Trove not active"
+        );
         dropCollateralPrice();
         uint256[] memory troveArray = new uint256[](1);
         troveArray[0] = strategy.troveId();
         ITroveManager(troveManager).batchLiquidateTroves(troveArray);
         require(
-            uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId())) == uint8(ITroveManager.Status.closedByLiquidation),
+            uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId()))
+                == uint8(ITroveManager.Status.closedByLiquidation),
             "Trove not liquidated"
         );
     }

@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.23;
 
-import {LiquityV2LBStrategy as Strategy, AggregatorInterface, IAddressesRegistry, IExchange, IStrategy} from "./Strategy.sol";
+import {
+    LiquityV2LBStrategy as Strategy,
+    AggregatorInterface,
+    IAddressesRegistry,
+    IExchange,
+    IStrategy
+} from "./Strategy.sol";
 import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
 
 contract StrategyFactory {
@@ -40,8 +46,9 @@ contract StrategyFactory {
         string calldata _name
     ) external virtual returns (address) {
         // tokenized strategies available setters.
-        IStrategyInterface _newStrategy =
-            IStrategyInterface(address(new Strategy(_addressesRegistry, _stakedLenderVault, _priceFeed, _exchange, _name)));
+        IStrategyInterface _newStrategy = IStrategyInterface(
+            address(new Strategy(_addressesRegistry, _stakedLenderVault, _priceFeed, _exchange, _name))
+        );
 
         _newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
 

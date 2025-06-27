@@ -53,7 +53,12 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @param _name The name of the strategy.
      * @param _borrowToken The address of the borrow token.
      */
-    constructor(address _asset, string memory _name, address _borrowToken, address _lenderVault) BaseHealthCheck(_asset, _name) {
+    constructor(
+        address _asset,
+        string memory _name,
+        address _borrowToken,
+        address _lenderVault
+    ) BaseHealthCheck(_asset, _name) {
         borrowToken = _borrowToken;
 
         // Set default variables
@@ -91,7 +96,10 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @dev Target must be less than warning, warning must be <= 9000, target cannot be 0
      */
     function setLtvMultipliers(uint16 _targetLTVMultiplier, uint16 _warningLTVMultiplier) external onlyManagement {
-        require(_warningLTVMultiplier <= 9_000 && _targetLTVMultiplier < _warningLTVMultiplier && _targetLTVMultiplier != 0, "invalid LTV");
+        require(
+            _warningLTVMultiplier <= 9_000 && _targetLTVMultiplier < _warningLTVMultiplier && _targetLTVMultiplier != 0,
+            "invalid LTV"
+        );
         targetLTVMultiplier = _targetLTVMultiplier;
         warningLTVMultiplier = _warningLTVMultiplier;
     }
@@ -293,7 +301,8 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
             }
 
             /// Convert to borrowToken
-            uint256 amountToBorrowBT = Math.min(_fromUsd(amountToBorrowUsd, borrowToken), Math.min(_lenderMaxDeposit(), _maxBorrowAmount()));
+            uint256 amountToBorrowBT =
+                Math.min(_fromUsd(amountToBorrowUsd, borrowToken), Math.min(_lenderMaxDeposit(), _maxBorrowAmount()));
 
             if (amountToBorrowBT == 0) return false;
 
@@ -420,7 +429,8 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
             }
 
             /// convert to borrowToken
-            uint256 amountToBorrowBT = Math.min(_fromUsd(amountToBorrowUsd, borrowToken), Math.min(_lenderMaxDeposit(), _maxBorrowAmount()));
+            uint256 amountToBorrowBT =
+                Math.min(_fromUsd(amountToBorrowUsd, borrowToken), Math.min(_lenderMaxDeposit(), _maxBorrowAmount()));
 
             /// We want to make sure that the reward apr > borrow apr so we don't report a loss
             /// Borrowing will cause the borrow apr to go up and the rewards apr to go down
@@ -475,7 +485,8 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
             /// still some debt remaining
             /// but no capital to repay
             /// And the leave debt flag is false.
-            _needed > balanceOfAsset() - balance && balanceOfDebt() > 0 && balanceOfLentAssets() == 0 && !leaveDebtBehind
+            _needed > balanceOfAsset() - balance && balanceOfDebt() > 0 && balanceOfLentAssets() == 0
+                && !leaveDebtBehind
         ) {
             /// using this part of code may result in losses but it is necessary to unlock full collateral
             /// in case of wind down. This should only occur when depleting the strategy so we buy the full
