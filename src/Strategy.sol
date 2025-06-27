@@ -48,7 +48,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     uint256 private constant DECIMALS_DIFF = 1e10;
 
     /// @notice Minimum dust threshold
-    uint256 private constant MIN_DUST_THRESHOLD = 1e15;
+    uint256 public constant MIN_DUST_THRESHOLD = 1e15;
 
     /// @notice The governance address
     address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
@@ -103,6 +103,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         require(_exchange.TOKEN() == borrowToken && _exchange.PAIRED_WITH() == address(asset), "!exchange");
 
         forceLeverage = true;
+        dustThreshold = MIN_DUST_THRESHOLD;
 
         BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
         TROVE_MANAGER = _addressesRegistry.troveManager();
@@ -205,7 +206,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function sweep(
         ERC20 _token
     ) external {
-        require(msg.sender == GOV, "!gov");
+        require(msg.sender == GOV, "toopleb");
         require(_token != asset, "!asset");
         _token.safeTransfer(GOV, _token.balanceOf(address(this)));
     }

@@ -26,11 +26,11 @@ library LenderOps {
     // Write functions
     // ===============================================================
 
-    function lend(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external returns (uint256) {
+    function lend(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external {
         _staker.deposit(_vault.deposit(_amount, address(this)), address(this));
     }
 
-    function withdraw(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external returns (uint256) {
+    function withdraw(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external {
         if (_amount > 0) {
             uint256 _shares =
                 Math.min(_vault.previewWithdraw(_amount), _staker.previewRedeem(_staker.balanceOf(address(this))));

@@ -8,6 +8,8 @@ interface ILenderBorrower is IBaseHealthCheck {
     // Public Variables
     function borrowToken() external view returns (address);
 
+    function lenderVault() external view returns (address);
+
     function leaveDebtBehind() external view returns (bool);
 
     function depositLimit() external view returns (uint256);

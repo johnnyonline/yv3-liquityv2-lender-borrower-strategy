@@ -18,6 +18,7 @@ interface IStrategyInterface is ILenderBorrower {
     // Constants
     // ===============================================================
 
+    function MIN_DUST_THRESHOLD() external view returns (uint256);
     function GOV() external view returns (address);
     function VAULT_APR_ORACLE() external view returns (address);
     function PRICE_FEED() external view returns (address);

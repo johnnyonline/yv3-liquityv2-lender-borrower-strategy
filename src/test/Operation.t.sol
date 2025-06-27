@@ -7,6 +7,8 @@ import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
 
 contract OperationTest is Setup {
 
+    error NotEnoughBoldBalance();
+
     function setUp() public virtual override {
         super.setUp();
     }
@@ -18,7 +20,14 @@ contract OperationTest is Setup {
         assertEq(strategy.management(), management);
         assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
         assertEq(strategy.keeper(), keeper);
-        // TODO: add additional check on strat params
+        assertEq(strategy.borrowToken(), IStrategyInterface(strategy.lenderVault()).asset());
+        assertTrue(strategy.forceLeverage());
+        assertEq(strategy.troveId(), 0);
+        assertEq(strategy.dustThreshold(), strategy.MIN_DUST_THRESHOLD());
+        assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
+        assertEq(strategy.TROVE_MANAGER(), troveManager);
+        assertEq(strategy.EXCHANGE(), address(exchange));
+        assertEq(strategy.STAKED_LENDER_VAULT(), stybold);
     }
 
     function test_operation(
@@ -358,6 +367,9 @@ contract OperationTest is Setup {
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
 
+        // Rewards to claim
+        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();
         assertTrue(trigger, "sellRewards");
@@ -378,6 +390,10 @@ contract OperationTest is Setup {
         assertGt(profit, 0, "!profit"); // If no price swinges / other costs, being redeemed is actually profitable
         assertEq(loss, 0, "!loss");
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
+
+        // Set keeper as zombie slayer
+        vm.prank(management);
+        strategy.setZombieSlayer(keeper, true);
 
         // Get our trove out from zombie mode
         (uint256 _upperHint, uint256 _lowerHint) = findHints();
@@ -439,6 +455,9 @@ contract OperationTest is Setup {
         // Check debt decreased
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
+        // Rewards to claim
+        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();
         assertTrue(trigger, "sellRewards");
@@ -494,6 +513,9 @@ contract OperationTest is Setup {
         // Check debt decreased
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
+        // Rewards to claim
+        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();
         assertTrue(trigger, "sellRewards");
@@ -526,6 +548,95 @@ contract OperationTest is Setup {
         // Check return Values
         assertEq(profit, 0, "!profit");
         assertGt(loss, 0, "!loss");
+    }
+
+    function test_operation_lostLentAssets(uint256 _amount) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Set protocol fee to 0 and perf fee to 0
+        setFees(0, 0);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 vaultLoss = strategy.balanceOfLentAssets() * 5 / 100; // 5% loss
+        vm.prank(address(strategy));
+        ERC20(address(lenderVault)).transfer(address(6969), vaultLoss);
+
+        // Set health check to accept loss
+        vm.prank(management);
+        strategy.setLossLimitRatio(5_000); // 50% loss
+
+        // Report loss
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertEq(profit, 0, "!profit");
+        assertGe(loss, 0, "!loss");
+
+        // Shutdown the strategy (can't repay entire debt without)
+        vm.startPrank(emergencyAdmin);
+        strategy.shutdownStrategy();
+
+        vm.expectRevert(NotEnoughBoldBalance.selector); // Not enough BOLD to repay the loan
+        strategy.emergencyWithdraw(type(uint256).max);
+
+        // Withdraw enough collateral to repay the loan
+        uint256 collToSell = strategy.balanceOfCollateral() * 25 / 100;
+        strategy.manualWithdraw(address(0), collToSell);
+
+        // Sell collateral to buy debt
+        strategy.buyBorrowToken(type(uint256).max);
+
+        // Close trove and repay the loan
+        strategy.emergencyWithdraw(type(uint256).max);
+
+        // Sell any leftover borrow token to asset
+        strategy.sellBorrowToken(type(uint256).max);
+
+        vm.stopPrank();
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        assertLt(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+
+        // Around 5% loss
+        assertApproxEqRel(asset.balanceOf(user), balanceBefore + _amount, 5e16); // 5%
+
+        balanceBefore = asset.balanceOf(strategist);
+
+        // Report
+        vm.prank(keeper);
+        strategy.report();
+
+        vm.startPrank(strategist);
+        strategy.redeem(strategy.maxRedeem(strategist), strategist, strategist);
+        vm.stopPrank();
+
+        assertLt(asset.balanceOf(strategist), balanceBefore + strategistDeposit, "!final balance");
+
+        // Around 5% loss
+        assertApproxEqRel(asset.balanceOf(strategist), balanceBefore + strategistDeposit, 6e16); // 6% :O
+
+        checkStrategyTotals(strategy, 0, 0, 0);
     }
 
     function test_operation_liquidation(
