@@ -48,6 +48,7 @@ contract Setup is Test, IEvents {
     // Liquity WETH
     address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
     address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526;
+    address public wrongAddressesRegistry = 0x8d733F7ea7c23Cbea7C613B6eBd845d46d3aAc54; // wstETH
     address public borrowerOperations = 0x372ABD1810eAF23Cb9D941BbE7596DFb2c46BC65;
     address public troveManager = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
     address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
@@ -233,10 +234,18 @@ contract Setup is Test, IEvents {
         vm.prank(management);
         ERC20(tokenAddrs["WETH"]).approve(address(strategy), ETH_GAS_COMPENSATION);
 
+        uint256 _lentBefore = strategy.balanceOfLentAssets();
+
         // Open Trove
         (uint256 _upperHint, uint256 _lowerHint) = findHints();
         vm.prank(management);
         strategy.openTrove(_upperHint, _lowerHint);
+
+        vm.prank(management);
+        vm.expectRevert("troveId");
+        strategy.openTrove(_upperHint, _lowerHint);
+
+        assertApproxEqAbs(strategy.balanceOfLentAssets(), _lentBefore + MIN_DEBT, 10, "!lentAssets");
 
         return _initialStrategistDeposit;
     }

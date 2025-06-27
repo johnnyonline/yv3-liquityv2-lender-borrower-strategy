@@ -12,7 +12,9 @@ interface IStrategyInterface is ILenderBorrower {
     function forceLeverage() external view returns (bool);
     function troveId() external view returns (uint256);
     function dustThreshold() external view returns (uint256);
-    function isZombieSlayer(address _zombieSlayer) external view returns (bool);
+    function isZombieSlayer(
+        address _zombieSlayer
+    ) external view returns (bool);
 
     // ===============================================================
     // Constants
@@ -33,7 +35,9 @@ interface IStrategyInterface is ILenderBorrower {
 
     function openTrove(uint256 _upperHint, uint256 _lowerHint) external;
     function adjustTroveInterestRate(uint256 _newAnnualInterestRate, uint256 _upperHint, uint256 _lowerHint) external;
-    function buyBorrowToken(uint256 _amount) external;
+    function buyBorrowToken(
+        uint256 _amount
+    ) external;
     function setDustThreshold(
         uint256 _dustThreshold
     ) external;

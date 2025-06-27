@@ -143,7 +143,10 @@ contract ShutdownTest is Setup {
         strategy.emergencyWithdraw(type(uint256).max);
         vm.stopPrank();
 
-        assertEq(uint8(ITroveManager(strategy.TROVE_MANAGER()).getTroveStatus(strategy.troveId())), uint8(ITroveManager.Status.closedByOwner));
+        assertEq(
+            uint8(ITroveManager(strategy.TROVE_MANAGER()).getTroveStatus(strategy.troveId())),
+            uint8(ITroveManager.Status.closedByOwner)
+        );
         assertEq(strategy.balanceOfCollateral(), 0);
         assertEq(strategy.balanceOfLentAssets(), 0);
         assertEq(strategy.balanceOfDebt(), 0);

@@ -3,7 +3,15 @@ pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
 import {IVaultAPROracle} from "../interfaces/IVaultAPROracle.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {
+    AggregatorInterface,
+    Setup,
+    ERC20,
+    IAddressesRegistry,
+    IExchange,
+    IStrategy,
+    IStrategyInterface
+} from "./utils/Setup.sol";
 
 contract OperationTest is Setup {
 
@@ -28,6 +36,44 @@ contract OperationTest is Setup {
         assertEq(strategy.TROVE_MANAGER(), troveManager);
         assertEq(strategy.EXCHANGE(), address(exchange));
         assertEq(strategy.STAKED_LENDER_VAULT(), stybold);
+    }
+
+    function test_invalidDeployment() public {
+        vm.expectRevert("!exchange");
+        strategyFactory.newStrategy(
+            IAddressesRegistry(wrongAddressesRegistry),
+            IStrategy(address(lenderVault)),
+            AggregatorInterface(address(0)),
+            IExchange(address(exchange)),
+            "Tokenized Strategy"
+        );
+
+        vm.expectRevert();
+        strategyFactory.newStrategy(
+            IAddressesRegistry(addressesRegistry),
+            IStrategy(tokenAddrs["YFI"]),
+            AggregatorInterface(address(0)),
+            IExchange(address(exchange)),
+            "Tokenized Strategy"
+        );
+
+        vm.expectRevert("!priceFeed");
+        strategyFactory.newStrategy(
+            IAddressesRegistry(addressesRegistry),
+            IStrategy(address(lenderVault)),
+            AggregatorInterface(address(tokenAddrs["YFI"])),
+            IExchange(address(exchange)),
+            "Tokenized Strategy"
+        );
+
+        vm.expectRevert();
+        strategyFactory.newStrategy(
+            IAddressesRegistry(addressesRegistry),
+            IStrategy(address(lenderVault)),
+            AggregatorInterface(address(0)),
+            IExchange(address(0)),
+            "Tokenized Strategy"
+        );
     }
 
     function test_operation(
@@ -550,7 +596,9 @@ contract OperationTest is Setup {
         assertGt(loss, 0, "!loss");
     }
 
-    function test_operation_lostLentAssets(uint256 _amount) public {
+    function test_operation_lostLentAssets(
+        uint256 _amount
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Set protocol fee to 0 and perf fee to 0

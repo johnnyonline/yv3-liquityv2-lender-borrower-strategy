@@ -181,10 +181,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Allow an address to call `adjustTroveInterestRate()`
     /// @param _zombieSlayer The address to set as a zombie slayer
     /// @param _isSlayer Whether the address is a zombie slayer
-    function setZombieSlayer(
-        address _zombieSlayer,
-        bool _isSlayer
-    ) external onlyManagement {
+    function setZombieSlayer(address _zombieSlayer, bool _isSlayer) external onlyManagement {
         isZombieSlayer[_zombieSlayer] = _isSlayer;
     }
 
