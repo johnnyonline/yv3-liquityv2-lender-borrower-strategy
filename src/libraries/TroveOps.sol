@@ -39,7 +39,7 @@ library TroveOps {
         uint256 _upperHint,
         uint256 _lowerHint
     ) external returns (uint256) {
-        WETH.transferFrom(msg.sender, address(this), ETH_GAS_COMPENSATION);
+        WETH.safeTransferFrom(msg.sender, address(this), ETH_GAS_COMPENSATION);
         return _borrowerOperations.openTrove(
             address(this), // owner
             block.timestamp, // ownerIndex
