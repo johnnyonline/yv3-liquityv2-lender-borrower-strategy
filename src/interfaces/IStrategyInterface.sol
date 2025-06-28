@@ -12,7 +12,7 @@ interface IStrategyInterface is ILenderBorrower {
     function forceLeverage() external view returns (bool);
     function troveId() external view returns (uint256);
     function dustThreshold() external view returns (uint256);
-    function isZombieSlayer(
+    function zombieSlayer(
         address _zombieSlayer
     ) external view returns (bool);
     function allowed(

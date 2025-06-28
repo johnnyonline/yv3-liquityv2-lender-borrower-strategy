@@ -38,7 +38,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     uint256 public dustThreshold;
 
     /// @notice Mapping of addresses that can call `adjustZombieTrove()`
-    mapping(address => bool) public isZombieSlayer;
+    mapping(address => bool) public zombieSlayer;
 
     /// @notice Addresses allowed to deposit
     mapping(address => bool) public allowed;
@@ -184,9 +184,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @notice Set an address as a zombie slayer
     /// @param _zombieSlayer The address to set as a zombie slayer
-    /// @param _isSlayer Whether the address is a zombie slayer
-    function setZombieSlayer(address _zombieSlayer, bool _isSlayer) external onlyManagement {
-        isZombieSlayer[_zombieSlayer] = _isSlayer;
+    /// @param _slayer Whether the address is a zombie slayer
+    function setZombieSlayer(address _zombieSlayer, bool _slayer) external onlyManagement {
+        zombieSlayer[_zombieSlayer] = _slayer;
     }
 
     /// @notice Allow a specific address to deposit
@@ -203,7 +203,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @param _upperHint Upper hint
     /// @param _lowerHint Lower hint
     function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external {
-        require(isZombieSlayer[msg.sender], "!zombieSlayer");
+        require(zombieSlayer[msg.sender], "!zombieSlayer");
 
         // (1) Mint just enough to get the trove out of zombie mode and (2) use all the collateral we have
         TroveOps.adjustZombieTrove(

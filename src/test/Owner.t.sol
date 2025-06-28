@@ -91,10 +91,10 @@ contract OwnerTest is Setup {
 
     function test_setZombieSlayer() public {
         address _zombieSlayer = address(0x123);
-        assertFalse(strategy.isZombieSlayer(_zombieSlayer));
+        assertFalse(strategy.zombieSlayer(_zombieSlayer));
         vm.prank(management);
         strategy.setZombieSlayer(_zombieSlayer, true);
-        assertTrue(strategy.isZombieSlayer(_zombieSlayer));
+        assertTrue(strategy.zombieSlayer(_zombieSlayer));
     }
 
     function test_setZombieSlayer_wrongCaller(
