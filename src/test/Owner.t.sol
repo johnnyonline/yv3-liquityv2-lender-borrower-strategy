@@ -114,6 +114,27 @@ contract OwnerTest is Setup {
         strategy.adjustZombieTrove(0, 0);
     }
 
+    function test_setAllowed(
+        address _newAllowed
+    ) public {
+        assertFalse(strategy.allowed(_newAllowed));
+        vm.startPrank(management);
+        strategy.setAllowed(_newAllowed, true);
+        assertTrue(strategy.allowed(_newAllowed));
+        strategy.setAllowed(_newAllowed, false);
+        assertFalse(strategy.allowed(_newAllowed));
+        vm.stopPrank();
+    }
+
+    function setAllowed_wrongCaller(
+        address _wrongCaller
+    ) public {
+        vm.assume(_wrongCaller != management);
+        vm.expectRevert("!management");
+        vm.prank(_wrongCaller);
+        strategy.setAllowed(address(0), true);
+    }
+
     function test_sweep_wrongCaller(
         address _wrongCaller
     ) public {

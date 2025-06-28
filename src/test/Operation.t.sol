@@ -75,6 +75,23 @@ contract OperationTest is Setup {
         );
     }
 
+    function test_deposit_notAllowed(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        vm.prank(management);
+        strategy.setAllowed(user, false);
+
+        airdrop(ERC20(strategy.asset()), user, _amount);
+
+        vm.startPrank(user);
+        asset.approve(address(strategy), _amount);
+        vm.expectRevert("ERC4626: deposit more than max");
+        strategy.deposit(_amount, user);
+        vm.stopPrank();
+    }
+
     function test_operation(
         uint256 _amount
     ) public {

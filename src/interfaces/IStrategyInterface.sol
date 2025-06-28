@@ -15,6 +15,9 @@ interface IStrategyInterface is ILenderBorrower {
     function isZombieSlayer(
         address _zombieSlayer
     ) external view returns (bool);
+    function allowed(
+        address _address
+    ) external view returns (bool);
 
     // ===============================================================
     // Constants
@@ -37,13 +40,14 @@ interface IStrategyInterface is ILenderBorrower {
     function buyBorrowToken(
         uint256 _amount
     ) external;
-    function setDustThreshold(
-        uint256 _dustThreshold
-    ) external;
     function setForceLeverage(
         bool _forceLeverage
     ) external;
+    function setDustThreshold(
+        uint256 _dustThreshold
+    ) external;
     function setZombieSlayer(address _zombieSlayer, bool _isSlayer) external;
+    function setAllowed(address _address, bool _allowed) external;
     function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external;
     function sweep(
         address _token

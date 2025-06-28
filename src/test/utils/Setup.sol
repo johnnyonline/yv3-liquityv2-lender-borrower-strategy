@@ -136,8 +136,11 @@ contract Setup is Test, IEvents {
             )
         );
 
-        vm.prank(management);
+        vm.startPrank(management);
         _strategy.acceptManagement();
+        _strategy.setAllowed(strategist, true);
+        _strategy.setAllowed(user, true);
+        vm.stopPrank();
 
         return address(_strategy);
     }

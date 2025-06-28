@@ -40,6 +40,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Mapping of addresses that can call `adjustZombieTrove()`
     mapping(address => bool) public isZombieSlayer;
 
+    /// @notice Addresses allowed to deposit
+    mapping(address => bool) public allowed;
+
     // ===============================================================
     // Constants
     // ===============================================================
@@ -163,14 +166,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         _buyBorrowToken(_amount);
     }
 
-    /// @notice Set the dust threshold for the strategy
-    /// @param _dustThreshold New dust threshold
-    function setDustThreshold(
-        uint256 _dustThreshold
-    ) external onlyManagement {
-        dustThreshold = _dustThreshold;
-    }
-
     /// @notice Set the forceLeverage flag
     /// @param _forceLeverage The new value for the forceLeverage flag
     function setForceLeverage(
@@ -179,11 +174,26 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         forceLeverage = _forceLeverage;
     }
 
+    /// @notice Set the dust threshold for the strategy
+    /// @param _dustThreshold New dust threshold
+    function setDustThreshold(
+        uint256 _dustThreshold
+    ) external onlyManagement {
+        dustThreshold = _dustThreshold;
+    }
+
     /// @notice Set an address as a zombie slayer
     /// @param _zombieSlayer The address to set as a zombie slayer
     /// @param _isSlayer Whether the address is a zombie slayer
     function setZombieSlayer(address _zombieSlayer, bool _isSlayer) external onlyManagement {
         isZombieSlayer[_zombieSlayer] = _isSlayer;
+    }
+
+    /// @notice Allow a specific address to deposit
+    /// @param _address Address to allow
+    /// @param _allowed Whether the address is allowed to deposit
+    function setAllowed(address _address, bool _allowed) external onlyManagement {
+        allowed[_address] = _allowed;
     }
 
     /// @notice Adjust zombie trove
@@ -261,6 +271,13 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
     // View functions
     // ===============================================================
+
+    /// @inheritdoc BaseLenderBorrower
+    function availableDepositLimit(
+        address _owner
+    ) public view override returns (uint256) {
+        return allowed[_owner] || _owner == address(this) ? BaseLenderBorrower.availableDepositLimit(_owner) : 0;
+    }
 
     /// @inheritdoc BaseLenderBorrower
     function _getPrice(
