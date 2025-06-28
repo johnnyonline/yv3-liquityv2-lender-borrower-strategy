@@ -37,7 +37,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Any amount below this will be ignored
     uint256 public dustThreshold;
 
-    /// @notice Mapping of addresses that can call `adjustZombieTrove()`
+    /// @notice Addresses that can call `adjustZombieTrove()`
     mapping(address => bool) public zombieSlayer;
 
     /// @notice Addresses allowed to deposit
