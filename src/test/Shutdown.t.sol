@@ -185,11 +185,11 @@ contract ShutdownTest is Setup {
         airdrop(asset, address(strategy), _amount);
         airdrop(borrowToken, address(strategy), _amount);
 
-        vm.expectRevert("toopleb");
+        vm.expectRevert("!governance");
         vm.prank(user);
         strategy.sweep(address(borrowToken));
 
-        vm.expectRevert("toopleb");
+        vm.expectRevert("!governance");
         vm.prank(management);
         strategy.sweep(address(borrowToken));
 

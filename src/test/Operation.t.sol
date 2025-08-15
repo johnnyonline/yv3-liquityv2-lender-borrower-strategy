@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {IVaultAPROracle} from "../interfaces/IVaultAPROracle.sol";
 import {
     AggregatorInterface,
     Setup,
@@ -29,7 +28,6 @@ contract OperationTest is Setup {
         assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
         assertEq(strategy.keeper(), keeper);
         assertEq(strategy.borrowToken(), IStrategyInterface(strategy.lenderVault()).asset());
-        assertTrue(strategy.forceLeverage());
         assertEq(strategy.troveId(), 0);
         assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
         assertEq(strategy.TROVE_MANAGER(), troveManager);
@@ -358,49 +356,6 @@ contract OperationTest is Setup {
         assertTrue(!trigger);
     }
 
-    function test_tendTrigger_noRewards(
-        uint256 _amount
-    ) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-
-        // Strategist makes initial deposit and opens a trove
-        strategistDepositAndOpenTrove(true);
-
-        // Deposit into strategy
-        mintAndDepositIntoStrategy(strategy, user, _amount);
-
-        (bool trigger,) = strategy.tendTrigger();
-        assertTrue(!trigger);
-
-        // (almost) zero out rewards
-        vm.mockCall(
-            address(strategy.VAULT_APR_ORACLE()),
-            abi.encodeWithSelector(IVaultAPROracle.getStrategyApr.selector),
-            abi.encode(1)
-        );
-        assertEq(strategy.getNetRewardApr(0), 1);
-
-        vm.prank(management);
-        strategy.setForceLeverage(false);
-
-        // Now that it's unprofitable to borrow, we should tend
-        (trigger,) = strategy.tendTrigger();
-        assertTrue(trigger);
-
-        vm.prank(management);
-        strategy.setForceLeverage(true);
-
-        assertTrue(strategy.forceLeverage());
-        assertEq(strategy.getNetBorrowApr(0), 0);
-
-        // Now that we force leverage, we should not tend
-        (trigger,) = strategy.tendTrigger();
-        assertTrue(!trigger);
-
-        vm.expectRevert("!management");
-        strategy.setForceLeverage(false);
-    }
-
     function test_operation_redemptionToZombie(
         uint256 _amount
     ) public {
@@ -453,13 +408,9 @@ contract OperationTest is Setup {
         assertEq(loss, 0, "!loss");
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
 
-        // Set keeper as zombie slayer
-        vm.prank(management);
-        strategy.setZombieSlayer(keeper, true);
-
         // Get our trove out from zombie mode
         (uint256 _upperHint, uint256 _lowerHint) = findHints();
-        vm.prank(keeper);
+        vm.prank(emergencyAdmin);
         strategy.adjustZombieTrove(_upperHint, _lowerHint);
 
         // Now need to leverage

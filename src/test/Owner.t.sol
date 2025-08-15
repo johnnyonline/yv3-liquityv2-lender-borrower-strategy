@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup, ITroveManager} from "./utils/Setup.sol";
 
 contract OwnerTest is Setup {
 
@@ -23,15 +23,12 @@ contract OwnerTest is Setup {
 
         uint256 _newAnnualInterestRate = MIN_ANNUAL_INTEREST_RATE * 2;
 
-        vm.prank(management);
-        strategy.setForceLeverage(false);
-
-        assertEq(strategy.getNetBorrowApr(0), MIN_ANNUAL_INTEREST_RATE);
+        assertEq(ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate, MIN_ANNUAL_INTEREST_RATE);
 
         vm.prank(emergencyAdmin);
         strategy.adjustTroveInterestRate(_newAnnualInterestRate, 0, 0);
 
-        assertEq(strategy.getNetBorrowApr(0), _newAnnualInterestRate);
+        assertEq(ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate, _newAnnualInterestRate);
     }
 
     function test_adjustTroveInterestRate_noTrove() public {
@@ -73,47 +70,6 @@ contract OwnerTest is Setup {
         strategy.setDustThreshold(0);
     }
 
-    function test_setForceLeverage() public {
-        assertTrue(strategy.forceLeverage());
-        vm.prank(management);
-        strategy.setForceLeverage(false);
-        assertFalse(strategy.forceLeverage());
-    }
-
-    function test_setForceLeverage_wrongCaller(
-        address _wrongCaller
-    ) public {
-        vm.assume(_wrongCaller != management);
-        vm.expectRevert("!management");
-        vm.prank(_wrongCaller);
-        strategy.setForceLeverage(false);
-    }
-
-    function test_setZombieSlayer() public {
-        address _zombieSlayer = address(0x123);
-        assertFalse(strategy.zombieSlayer(_zombieSlayer));
-        vm.prank(management);
-        strategy.setZombieSlayer(_zombieSlayer, true);
-        assertTrue(strategy.zombieSlayer(_zombieSlayer));
-    }
-
-    function test_setZombieSlayer_wrongCaller(
-        address _wrongCaller
-    ) public {
-        vm.assume(_wrongCaller != management);
-        vm.expectRevert("!management");
-        vm.prank(_wrongCaller);
-        strategy.setZombieSlayer(address(0x123), true);
-    }
-
-    function test_adjustZombieTrove_wrongCaller(
-        address _wrongCaller
-    ) public {
-        vm.expectRevert("!zombieSlayer");
-        vm.prank(_wrongCaller);
-        strategy.adjustZombieTrove(0, 0);
-    }
-
     function test_setAllowed(
         address _newAllowed
     ) public {
@@ -139,7 +95,7 @@ contract OwnerTest is Setup {
         address _wrongCaller
     ) public {
         vm.assume(_wrongCaller != strategy.GOV());
-        vm.expectRevert("toopleb");
+        vm.expectRevert("!governance");
         vm.prank(_wrongCaller);
         strategy.sweep(address(0));
     }
