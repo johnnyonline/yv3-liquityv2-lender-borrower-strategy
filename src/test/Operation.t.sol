@@ -11,6 +11,11 @@ import {
     IStrategy,
     IStrategyInterface
 } from "./utils/Setup.sol";
+// @todo -- test test_operation_redemptionToZombie_notProfitableAnymore(ToBorrow)
+// @todo -- go through all tests, cleanup, look for uncovered scenarios
+// @todo -- what happens if we want to close the strategy? last depositor? onEmergencyWithdraw?
+// @todo -- test `hasBorrowTokenSurplus`
+// @todo -- test tend has more idle than when it's called (after sell rewards)
 
 contract OperationTest is Setup {
 
@@ -385,7 +390,7 @@ contract OperationTest is Setup {
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
 
         // Rewards to claim
-        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
 
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();
@@ -465,7 +470,7 @@ contract OperationTest is Setup {
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
         // Rewards to claim
-        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
 
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();
@@ -523,7 +528,7 @@ contract OperationTest is Setup {
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
         // Rewards to claim
-        assertTrue(strategy.isRewardsToClaim(), "!rewardsToClaim");
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
 
         // Rewards to sell
         (bool trigger,) = strategy.tendTrigger();

@@ -49,15 +49,15 @@ contract ETHToBOLDExchange is IExchange {
     // View functions
     // ============================================================================================
 
-    /// @notice Returns the address of the `token`
-    /// @return Address of the token
-    function TOKEN() external pure override returns (address) {
+    /// @notice Returns the address of the borrow token
+    /// @return Address of the borrow token
+    function BORROW() external pure override returns (address) {
         return address(BOLD);
     }
 
-    /// @notice Returns the address of the paired token
-    /// @return Address of the paired token
-    function PAIRED_WITH() external pure override returns (address) {
+    /// @notice Returns the address of the collateral token
+    /// @return Address of the collateral token
+    function COLLATERAL() external pure override returns (address) {
         return address(WETH);
     }
 
@@ -65,13 +65,13 @@ contract ETHToBOLDExchange is IExchange {
     // Mutative functions
     // ============================================================================================
 
-    /// @notice Swaps between token and the paired with token
+    /// @notice Swaps between the borrow token and the collateral token
     /// @param _amount Amount of tokens to swap
     /// @param _minAmount Minimum amount of tokens to receive
-    /// @param _fromToken If true, swap from token to the paired token, false otherwise
+    /// @param _fromBorrow If true, swap from borrow token to the collateral token, false otherwise
     /// @return Amount of tokens received
-    function swap(uint256 _amount, uint256 _minAmount, bool _fromToken) external override returns (uint256) {
-        return (_fromToken ? _swapFrom(_amount, _minAmount) : _swapTo(_amount, _minAmount));
+    function swap(uint256 _amount, uint256 _minAmount, bool _fromBorrow) external override returns (uint256) {
+        return (_fromBorrow ? _swapFrom(_amount, _minAmount) : _swapTo(_amount, _minAmount));
     }
 
     /// @notice Sweep tokens from the contract
@@ -90,10 +90,10 @@ contract ETHToBOLDExchange is IExchange {
     // Internal functions
     // ============================================================================================
 
-    /// @notice Swaps from the borrow token to the paired token
+    /// @notice Swaps from the borrow token to the collateral token
     /// @param _amount Amount of borrow tokens to swap
-    /// @param _minAmount Minimum amount of paired tokens to receive
-    /// @return Amount of paired tokens received
+    /// @param _minAmount Minimum amount of collateral tokens to receive
+    /// @return Amount of collateral tokens received
     function _swapFrom(uint256 _amount, uint256 _minAmount) internal returns (uint256) {
         // Pull BOLD
         BOLD.safeTransferFrom(msg.sender, address(this), _amount);
@@ -122,8 +122,8 @@ contract ETHToBOLDExchange is IExchange {
         return _amountOut;
     }
 
-    /// @notice Swaps from the paired token to the borrow token
-    /// @param _amount Amount of paired tokens to swap
+    /// @notice Swaps from the collateral token to the borrow token
+    /// @param _amount Amount of collateral tokens to swap
     /// @param _minAmount Minimum amount of borrow tokens to receive
     /// @return Amount of borrow tokens received
     function _swapTo(uint256 _amount, uint256 _minAmount) internal returns (uint256) {

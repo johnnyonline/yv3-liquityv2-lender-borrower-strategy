@@ -10,7 +10,8 @@ interface IStrategyInterface is ILenderBorrower {
     // ===============================================================
 
     function troveId() external view returns (uint256);
-    function dustThreshold() external view returns (uint256);
+    function minSurplusAbsolute() external view returns (uint256);
+    function minSurplusRelative() external view returns (uint256);
     function allowed(
         address _address
     ) external view returns (bool);
@@ -37,9 +38,7 @@ interface IStrategyInterface is ILenderBorrower {
         uint256 _amount
     ) external;
     function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external;
-    function setDustThreshold(
-        uint256 _dustThreshold
-    ) external;
+    function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external;
     function setAllowed(address _address, bool _allowed) external;
     function sweep(
         address _token
@@ -49,6 +48,6 @@ interface IStrategyInterface is ILenderBorrower {
     // View functions
     // ===============================================================
 
-    function isRewardsToClaim() external view returns (bool);
+    function hasBorrowTokenSurplus() external view returns (bool);
 
 }

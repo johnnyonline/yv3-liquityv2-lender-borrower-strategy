@@ -17,6 +17,7 @@ import {
 } from "./interfaces/IAddressesRegistry.sol";
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
+import "forge-std/console2.sol";
 
 contract LiquityV2LBStrategy is BaseLenderBorrower {
 
@@ -29,8 +30,11 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Trove ID
     uint256 public troveId;
 
-    /// @notice Any amount below this will be ignored
-    uint256 public dustThreshold;
+    /// @notice Absolute surplus required (in BOLD) before tending is considered
+    uint256 public minSurplusAbsolute;
+
+    /// @notice Relative surplus required (in basis points) of current debt, before tending is considered
+    uint256 public minSurplusRelative;
 
     /// @notice Addresses allowed to deposit
     mapping(address => bool) public allowed;
@@ -39,10 +43,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // Constants
     // ===============================================================
 
-    /// @notice The difference in decimals between the price oracle (1e8) and Liquity's price (1e18)
+    /// @notice The difference in decimals between our price oracle (1e8) and Liquity's price oracle (1e18)
     uint256 private constant DECIMALS_DIFF = 1e10;
 
-    /// @notice The governance address, only one that is able to call `sweep()`
+    /// @notice The governance address, only one that is able to `sweep()`
     address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
 
     /// @notice WETH token
@@ -63,7 +67,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice The exchange contract for buying/selling the borrow token
     IExchange public immutable EXCHANGE;
 
-    /// @notice The staked lender vault contract (i.e. st-yBOLD)
+    /// @notice The staked lender vault contract (i.e. ysyBOLD)
     IStrategy public immutable STAKED_LENDER_VAULT;
 
     // ===============================================================
@@ -71,7 +75,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
 
     /// @param _addressesRegistry The Liquity addresses registry contract
-    /// @param _stakedLenderVault The staked lender vault contract (i.e. st-yBOLD)
+    /// @param _stakedLenderVault The staked lender vault contract
     /// @param _priceFeed The price feed contract for the `asset`
     /// @param _exchange The exchange contract for buying/selling borrow token
     /// @param _name The name of the strategy
@@ -89,9 +93,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             _stakedLenderVault.asset() // lenderVault
         )
     {
-        require(_exchange.TOKEN() == borrowToken && _exchange.PAIRED_WITH() == address(asset), "!exchange");
+        require(_exchange.BORROW() == borrowToken && _exchange.COLLATERAL() == address(asset), "!exchange");
 
-        dustThreshold = 10e18; // 10 BOLD
+        minSurplusAbsolute = 50e18; // 50 BOLD
+        minSurplusRelative = 100; // 1%
 
         BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
         TROVE_MANAGER = _addressesRegistry.troveManager();
@@ -155,7 +160,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @notice Adjust zombie trove
-    /// @dev Might need to be called after a redemption, if our debt is below `MIN_DEBT`
+    /// @dev Might need to be called after a redemption if our debt is below `MIN_DEBT`
     /// @dev Will fail if the trove is not in zombie mode
     /// @dev Should be called through a private RPC to avoid fee slippage
     /// @param _upperHint Upper hint
@@ -170,17 +175,23 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         _lendBorrowToken(balanceOfBorrowToken());
     }
 
-    /// @notice Set the dust threshold for the strategy
-    /// @param _dustThreshold New dust threshold
-    function setDustThreshold(
-        uint256 _dustThreshold
-    ) external onlyManagement {
-        dustThreshold = _dustThreshold;
+    /// @notice Set the surplus detection floors used by `hasBorrowTokenSurplus()`
+    /// @param _minSurplusAbsolute Absolute minimum surplus required, in borrow token units
+    /// @param _minSurplusRelative Relative minimum surplus required, as basis points of current debt
+    function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external onlyManagement {
+        require(_minSurplusRelative <= MAX_BPS / 10, "!bps"); // max 10%
+        minSurplusAbsolute = _minSurplusAbsolute;
+        minSurplusRelative = _minSurplusRelative;
     }
 
-    /// @notice Allow a specific address to deposit
-    /// @param _address Address to allow
-    /// @param _allowed Whether the address is allowed to deposit
+    /// @notice Allow (or disallow) a specific address to deposit
+    /// @dev Deposits can trigger new borrows, and Liquity charges an upfront fee on
+    ///      every debt increase. If deposits were permissionless, a malicious actor
+    ///      could repeatedly deposit/withdraw small amounts to force the strategy
+    ///      to borrow and pay the fee many times, socializing those costs across
+    ///      existing depositors. To prevent this griefing vector, deposits are gated
+    /// @param _address Address to allow or disallow
+    /// @param _allowed True to allow deposits from `_address`, false to block
     function setAllowed(address _address, bool _allowed) external onlyManagement {
         allowed[_address] = _allowed;
     }
@@ -247,6 +258,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function availableDepositLimit(
         address _owner
     ) public view override returns (uint256) {
+        // We check `_owner == address(this)` because BaseLenderBorrower uses `availableDepositLimit(address(this))`
         return allowed[_owner] || _owner == address(this) ? BaseLenderBorrower.availableDepositLimit(_owner) : 0;
     }
 
@@ -314,14 +326,26 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         return TROVE_MANAGER.getLatestTroveData(troveId).entireDebt;
     }
 
-    /// @notice Check if we have profit
-    /// @dev We want to return True here if we were redeemed, so we tend and minimize exchange rate exposure
-    /// @return True if we earned enough to claim rewards
-    function isRewardsToClaim() public view returns (bool) {
+    /// @notice Returns true when we hold more borrow token than we owe by a _meaningful_ margin
+    /// @dev Purpose is to detect redemptions/liquidations while avoiding action on normal profit
+    /// @return True if `surplus > max(absoluteFloor, relativeFloor)`
+    function hasBorrowTokenSurplus() public view returns (bool) {
         uint256 _loose = balanceOfBorrowToken();
         uint256 _have = balanceOfLentAssets() + _loose;
         uint256 _owe = balanceOfDebt();
-        return _have > _owe && _have - _owe > dustThreshold;
+        if (_have <= _owe) return false;
+
+        // Positive surplus we could realize by selling borrow token back to collateral
+        uint256 _surplus = _have - _owe;
+
+        // Use the stricter of the two floors (absolute or relative)
+        uint256 _floor = Math.max(
+            minSurplusAbsolute, // Absolute floor
+            _owe * minSurplusRelative / MAX_BPS // Relative floor (some percentage of current debt)
+        );
+
+        // Consider surplus only when higher than the higher floor
+        return _surplus > _floor;
     }
 
     // ===============================================================
@@ -330,16 +354,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @inheritdoc BaseLenderBorrower
     function _lendBorrowToken(
-        uint256 amount
+        uint256 _amount
     ) internal override {
-        LenderOps.lend(STAKED_LENDER_VAULT, lenderVault, amount);
+        LenderOps.lend(STAKED_LENDER_VAULT, lenderVault, _amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _withdrawBorrowToken(
-        uint256 amount
+        uint256 _amount
     ) internal override {
-        LenderOps.withdraw(STAKED_LENDER_VAULT, lenderVault, amount);
+        LenderOps.withdraw(STAKED_LENDER_VAULT, lenderVault, _amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -363,22 +387,26 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @inheritdoc BaseLenderBorrower
     function _tendTrigger() internal view override returns (bool) {
-        // If we were redeemed or just have enough profits (and the base fee is acceptable)
-        if (isRewardsToClaim() && _isBaseFeeAcceptable()) return true; // @todo -- here -- remove `_isBaseFeeAcceptable()`?
+        // If base fee is acceptable and we have a borrow token surplus (likely from redemption/liquidation),
+        // tend to minimize exchange rate exposure
+        if (_isBaseFeeAcceptable() && hasBorrowTokenSurplus()) return true;
 
-        // Otherwise, do nothing if the trove is not active
+        // If the trove is not active, do nothing
         if (TROVE_MANAGER.getTroveStatus(troveId) != ITroveManager.Status.active) return false;
 
-        // And finally, business as usual
+        // Finally, business as usual
         return BaseLenderBorrower._tendTrigger();
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _tend(
-        uint256 _totalIdle
+        uint256 /*_totalIdle*/
     ) internal override {
+        // Sell any surplus borrow token
         _claimAndSellRewards();
-        return BaseLenderBorrower._tend(_totalIdle);
+
+        // Using `balanceOfAsset()` because `_totalIdle` may increase after selling borrow token surplus
+        return BaseLenderBorrower._tend(balanceOfAsset());
     }
 
     /// @inheritdoc BaseLenderBorrower

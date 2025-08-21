@@ -11,7 +11,7 @@ library LenderOps {
     // ===============================================================
 
     /// @notice Returns the maximum amount of borrowed token we can lend
-    /// @param _staker The staker contract (i.e. st-yBOLD)
+    /// @param _staker The staker contract (i.e. ysyBOLD)
     /// @param _vault The vault contract (i.e. yBOLD)
     /// @return The maximum amount of borrowed token we can lend
     function maxDeposit(IERC4626 _staker, IERC4626 _vault) external view returns (uint256) {
@@ -19,7 +19,7 @@ library LenderOps {
     }
 
     /// @notice Returns the maximum amount of assets we can withdraw from the staker vault
-    /// @param _staker The staker contract (i.e. st-yBOLD)
+    /// @param _staker The staker contract (i.e. ysyBOLD)
     /// @param _vault The vault contract (i.e. yBOLD)
     /// @return The maximum amount of borrowed token we can withdraw from the staker vault
     function maxWithdraw(IERC4626 _staker, IERC4626 _vault) external view returns (uint256) {
@@ -27,7 +27,7 @@ library LenderOps {
     }
 
     /// @notice Returns the amount of borrow token we have lent
-    /// @param _staker The staker contract (i.e. st-yBOLD)
+    /// @param _staker The staker contract (i.e. ysyBOLD)
     /// @param _vault The vault contract (i.e. yBOLD)
     /// @return The amount of borrow token we have lent
     function balanceOfAssets(IERC4626 _staker, IERC4626 _vault) external view returns (uint256) {
@@ -39,7 +39,7 @@ library LenderOps {
     // ===============================================================
 
     /// @notice Deposits borrowed tokens into the staker vault
-    /// @param _staker The staker contract (i.e. st-yBOLD)
+    /// @param _staker The staker contract (i.e. ysyBOLD)
     /// @param _vault The vault contract (i.e. yBOLD)
     /// @param _amount The amount of tokens to deposit
     function lend(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external {
@@ -47,7 +47,7 @@ library LenderOps {
     }
 
     /// @notice Withdraws tokens from the staker vault
-    /// @param _staker The staker contract (i.e. st-yBOLD)
+    /// @param _staker The staker contract (i.e. ysyBOLD)
     /// @param _vault The vault contract (i.e. yBOLD)
     /// @param _amount The amount of tokens to withdraw
     function withdraw(IERC4626 _staker, IERC4626 _vault, uint256 _amount) external {

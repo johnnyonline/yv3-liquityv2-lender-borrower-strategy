@@ -23,12 +23,18 @@ contract OwnerTest is Setup {
 
         uint256 _newAnnualInterestRate = MIN_ANNUAL_INTEREST_RATE * 2;
 
-        assertEq(ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate, MIN_ANNUAL_INTEREST_RATE);
+        assertEq(
+            ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate,
+            MIN_ANNUAL_INTEREST_RATE
+        );
 
         vm.prank(emergencyAdmin);
         strategy.adjustTroveInterestRate(_newAnnualInterestRate, 0, 0);
 
-        assertEq(ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate, _newAnnualInterestRate);
+        assertEq(
+            ITroveManager(strategy.TROVE_MANAGER()).getLatestTroveData(strategy.troveId()).annualInterestRate,
+            _newAnnualInterestRate
+        );
     }
 
     function test_adjustTroveInterestRate_noTrove() public {
@@ -53,22 +59,22 @@ contract OwnerTest is Setup {
         strategy.buyBorrowToken(0);
     }
 
-    function test_setDustThreshold(
-        uint256 _newDustThreshold
-    ) public {
-        vm.prank(management);
-        strategy.setDustThreshold(_newDustThreshold);
-        assertEq(strategy.dustThreshold(), _newDustThreshold);
-    }
+    // function test_setDustThreshold( // @todo -- also test setSurplusFloors
+    //     uint256 _newDustThreshold
+    // ) public {
+    //     vm.prank(management);
+    //     strategy.setDustThreshold(_newDustThreshold);
+    //     assertEq(strategy.dustThreshold(), _newDustThreshold);
+    // }
 
-    function test_setDustThreshold_wrongCaller(
-        address _wrongCaller
-    ) public {
-        vm.assume(_wrongCaller != management);
-        vm.expectRevert("!management");
-        vm.prank(_wrongCaller);
-        strategy.setDustThreshold(0);
-    }
+    // function test_setDustThreshold_wrongCaller(
+    //     address _wrongCaller
+    // ) public {
+    //     vm.assume(_wrongCaller != management);
+    //     vm.expectRevert("!management");
+    //     vm.prank(_wrongCaller);
+    //     strategy.setDustThreshold(0);
+    // }
 
     function test_setAllowed(
         address _newAllowed
