@@ -15,3 +15,6 @@
 [submodule "lib/yearn-vaults-v3"]
 	path = lib/yearn-vaults-v3
 	url = https://github.com/yearn/yearn-vaults-v3
+[submodule "lib/bold"]
+	path = lib/bold
+	url = https://github.com/liquity/bold

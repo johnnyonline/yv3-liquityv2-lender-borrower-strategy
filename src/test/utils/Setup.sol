@@ -205,7 +205,7 @@ contract Setup is Test, IEvents {
     }
 
     function simulateEarningInterest() public {
-        // Airdrop some profit to st-yBOLD
+        // Airdrop some profit to ysyBOLD
         airdrop(ERC20(lenderVault.asset()), address(lenderVault), 100_000 ether);
 
         // Report profit

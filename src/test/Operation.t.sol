@@ -16,6 +16,11 @@ import {
 // @todo -- what happens if we want to close the strategy? last depositor? onEmergencyWithdraw?
 // @todo -- test `hasBorrowTokenSurplus`
 // @todo -- test tend has more idle than when it's called (after sell rewards)
+// @todo -- test _isTCRBelowCCR
+// @todo -- test IR adjustment (fees mostly)
+// @todo -- test close trove when TCR < CCR
+// @todo -- test redeemed, someone else uses our borrowing capacity such that any new debt we add leads to TCR < CCR so we revert?
+// @todo -- test liquidation/redemption when TCR < CCR
 
 contract OperationTest is Setup {
 
@@ -266,7 +271,7 @@ contract OperationTest is Setup {
         assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
         assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
 
-        // Withdrawl some collateral to pump LTV
+        // Withdraw some collateral to pump LTV
         uint256 collToSell = strategy.balanceOfCollateral() * 20 / 100;
         vm.prank(emergencyAdmin);
         strategy.manualWithdraw(address(0), collToSell);
@@ -299,7 +304,7 @@ contract OperationTest is Setup {
         (trigger,) = strategy.tendTrigger();
         assertFalse(trigger);
 
-        // Withdrawl some collateral to pump LTV
+        // Withdraw some collateral to pump LTV
         uint256 collToSell = strategy.balanceOfCollateral() * 20 / 100;
         vm.prank(emergencyAdmin);
         strategy.manualWithdraw(address(0), collToSell);
@@ -389,22 +394,22 @@ contract OperationTest is Setup {
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
 
-        // Rewards to claim
-        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
+        // Borrow token surplus to claim
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!hasBorrowTokenSurplus");
 
-        // Rewards to sell
+        // Borrow token surplus to sell
         (bool trigger,) = strategy.tendTrigger();
-        assertTrue(trigger, "sellRewards");
+        assertTrue(trigger, "hasBorrowTokenSurplus");
 
-        // Sell the rewards
+        // Sell the surplus
         vm.prank(keeper);
         strategy.tend();
 
-        // We sold the rewards
+        // We sold the surplus
         (trigger,) = strategy.tendTrigger();
-        assertFalse(trigger, "!sellRewards");
+        assertFalse(trigger, "!sellSurplus");
 
-        // Report profit (doesn't leverage)
+        // Report profit (doesn't leverage bc needs to exit zombie mode)
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
 
@@ -413,7 +418,7 @@ contract OperationTest is Setup {
         assertEq(loss, 0, "!loss");
         assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
 
-        // Get our trove out from zombie mode
+        // Get our trove out of zombie mode
         (uint256 _upperHint, uint256 _lowerHint) = findHints();
         vm.prank(emergencyAdmin);
         strategy.adjustZombieTrove(_upperHint, _lowerHint);
@@ -469,20 +474,20 @@ contract OperationTest is Setup {
         // Check debt decreased
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
-        // Rewards to claim
-        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
+        // Borrow token surplus to sell
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!hasBorrowTokenSurplus");
 
-        // Rewards to sell
+        // Surplus to sell
         (bool trigger,) = strategy.tendTrigger();
-        assertTrue(trigger, "sellRewards");
+        assertTrue(trigger, "sellSurplus");
 
-        // Sell the rewards
+        // Sell the surplus
         vm.prank(keeper);
         strategy.tend();
 
-        // We sold the rewards
+        // We sold the surplus
         (trigger,) = strategy.tendTrigger();
-        assertFalse(trigger, "!sellRewards");
+        assertFalse(trigger, "!sellSurplus");
 
         assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
 
@@ -527,12 +532,12 @@ contract OperationTest is Setup {
         // Check debt decreased
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
 
-        // Rewards to claim
-        assertTrue(strategy.hasBorrowTokenSurplus(), "!rewardsToClaim");
+        // Borrow token surplus to sell
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!hasBorrowTokenSurplus");
 
-        // Rewards to sell
+        // Surplus to sell
         (bool trigger,) = strategy.tendTrigger();
-        assertTrue(trigger, "sellRewards");
+        assertTrue(trigger, "sellSurplus");
 
         // Get rid of some borrow token to simulate a loss
         vm.startPrank(address(strategy));
@@ -541,13 +546,13 @@ contract OperationTest is Setup {
         );
         vm.stopPrank();
 
-        // Sell the rewards
+        // Sell the surplus
         vm.prank(keeper);
         strategy.tend();
 
-        // We sold the rewards
+        // We sold the surplus
         (trigger,) = strategy.tendTrigger();
-        assertFalse(trigger, "!sellRewards");
+        assertFalse(trigger, "!sellSurplus");
 
         assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
 
@@ -655,7 +660,7 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, 0, 0, 0);
     }
 
-    function test_operation_liquidation(
+    function test_operation_liquidation( // @todo -- do we get back some of the eth gas comp on liquidation?
         uint256 _amount
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);

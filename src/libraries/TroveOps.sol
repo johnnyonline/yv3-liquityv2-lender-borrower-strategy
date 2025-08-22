@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.23;
+pragma solidity 0.8.24;
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -133,8 +133,9 @@ library TroveOps {
     ) external {
         if (_troveManager.getTroveStatus(_troveId) == ITroveManager.Status.active) {
             _borrowerOperations.closeTrove(_troveId);
-            uint256 _balance = WETH.balanceOf(address(this));
-            if (_balance > ETH_GAS_COMPENSATION) WETH.safeTransfer(_management, ETH_GAS_COMPENSATION);
+            if (WETH.balanceOf(address(this)) >= ETH_GAS_COMPENSATION) {
+                WETH.safeTransfer(_management, ETH_GAS_COMPENSATION);
+            }
         } else if (_troveManager.getTroveStatus(_troveId) == ITroveManager.Status.closedByLiquidation) {
             if (_collSurplusPool.getCollateral(address(this)) > 0) _borrowerOperations.claimCollateral();
         }

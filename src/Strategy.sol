@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.23;
+pragma solidity 0.8.24;
 
 import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {LiquityMath} from "@liquity/dependencies/LiquityMath.sol";
 
 import {TroveOps} from "./libraries/TroveOps.sol";
 import {LenderOps} from "./libraries/LenderOps.sol";
@@ -18,7 +19,7 @@ import {
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
 import "forge-std/console2.sol";
-
+// @todo -- fix `_maxWithdrawal()` and `availableWithdrawLimit()` such that we do not try to withdraw when _isTCRBelowCCR (_maxBorrowAmount already fixed?)
 contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     using SafeERC20 for ERC20;
@@ -293,8 +294,12 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
-    function _maxBorrowAmount() internal pure override returns (uint256) {
-        return type(uint256).max;
+    function _maxBorrowAmount() internal view override returns (uint256) {
+        // When the branch TCR falls below the CCR, BorrowerOperations blocks `withdrawBold()`,
+        // in that case we should not attempt to borrow.
+        // When TCR >= CCR, our own target (<= 90% of MCR) is stricter than the CCR requirement,
+        // so don’t need to impose an additional cap here
+        return _isTCRBelowCCR() ? 0 : type(uint256).max;
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -348,6 +353,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         return _surplus > _floor;
     }
 
+    /// @notice Check if the branch Total Collateral Ratio (TCR) has fallen below the Critical Collateral Ratio (CCR)
+    /// @return True if TCR < CCR, false otherwise
+    function _isTCRBelowCCR() internal view returns (bool) {
+        return LiquityMath._computeCR(
+            BORROWER_OPERATIONS.getEntireBranchColl(),
+            BORROWER_OPERATIONS.getEntireBranchDebt(),
+            _getPrice(address(asset)) * DECIMALS_DIFF // LiquityMath expects 1e18 format
+        ) < BORROWER_OPERATIONS.CCR();
+    }
+
     // ===============================================================
     // Lender vault
     // ===============================================================
@@ -388,7 +403,11 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @inheritdoc BaseLenderBorrower
     function _tendTrigger() internal view override returns (bool) {
         // If base fee is acceptable and we have a borrow token surplus (likely from redemption/liquidation),
-        // tend to minimize exchange rate exposure
+        // tend to (1) minimize exchange rate exposure and (2) minimize the risk of someone uses our borrowing capacity
+        // before we manage to borrow again, such that any new debt we take will lead to TCR < CCR
+        //
+        // (2) chain of events: [1] we are redeemed [2] we have no debt but some collateral in the system
+        // [3] someone hops in and uses our collateral to borrow above CCR [4] we cannot take new debt because it will lead to TCR < CCR
         if (_isBaseFeeAcceptable() && hasBorrowTokenSurplus()) return true;
 
         // If the trove is not active, do nothing

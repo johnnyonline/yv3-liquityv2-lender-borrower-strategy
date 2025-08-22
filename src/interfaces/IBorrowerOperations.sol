@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.23;
+pragma solidity 0.8.24;
 
 interface IBorrowerOperations {
 
+    function getEntireBranchColl() external view returns (uint256 entireSystemColl);
+    function getEntireBranchDebt() external view returns (uint256 entireSystemDebt);
     function MCR() external view returns (uint256);
+    function CCR() external view returns (uint256);
     function openTrove(
         address _owner,
         uint256 _ownerIndex,
