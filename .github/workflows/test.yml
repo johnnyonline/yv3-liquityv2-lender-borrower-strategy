@@ -42,7 +42,7 @@ jobs:
         id: fmt
 
       - name: Install Foundry deps
-        run: forge install --no-commit
+        run: forge install
 
       - name: Show remappings
         run: forge remappings
