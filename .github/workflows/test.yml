@@ -41,6 +41,12 @@ jobs:
           forge fmt --check
         id: fmt
 
+      - name: Install Foundry deps
+        run: forge install --no-commit
+
+      - name: Show remappings
+        run: forge remappings
+
       - name: Run Forge tests
         run: |
           forge test -vvv --fork-url ${{ secrets.ETH_RPC_URL }}
