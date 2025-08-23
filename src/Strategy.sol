@@ -19,7 +19,7 @@ import {
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
 import "forge-std/console2.sol";
-// @todo -- fix `_maxWithdrawal()` and `availableWithdrawLimit()` such that we do not try to withdraw when _isTCRBelowCCR (_maxBorrowAmount already fixed?)
+
 contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     using SafeERC20 for ERC20;
@@ -46,6 +46,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @notice The difference in decimals between our price oracle (1e8) and Liquity's price oracle (1e18)
     uint256 private constant DECIMALS_DIFF = 1e10;
+
+    /// @notice Maximum relative surplus required (in basis points) before tending is considered
+    uint256 private constant MAX_RELATIVE_SURPLUS = 1000; // 10%
 
     /// @notice The governance address, only one that is able to `sweep()`
     address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
@@ -139,6 +142,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Adjust the interest rate of the trove
     /// @dev Will fail if the trove is not active
     /// @dev Should be called through a private RPC to avoid fee slippage
+    /// @dev Would incur an upfront fee if the adjustment is considered premature (i.e. within 7 days of last adjustment)
     /// @param _newAnnualInterestRate New annual interest rate
     /// @param _upperHint Upper hint
     /// @param _lowerHint Lower hint
@@ -180,7 +184,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @param _minSurplusAbsolute Absolute minimum surplus required, in borrow token units
     /// @param _minSurplusRelative Relative minimum surplus required, as basis points of current debt
     function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external onlyManagement {
-        require(_minSurplusRelative <= MAX_BPS / 10, "!bps"); // max 10%
+        require(_minSurplusRelative <= MAX_RELATIVE_SURPLUS, "!relativeSurplus");
         minSurplusAbsolute = _minSurplusAbsolute;
         minSurplusRelative = _minSurplusRelative;
     }
@@ -264,6 +268,12 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
+    function _maxWithdrawal() internal view override returns (uint256) {
+        // BorrowerOperations blocks `withdrawColl()` when TCR < CCR
+        return _isTCRBelowCCR() ? 0 : BaseLenderBorrower._maxWithdrawal();
+    }
+
+    /// @inheritdoc BaseLenderBorrower
     function _getPrice(
         address _asset
     ) internal view override returns (uint256) {
@@ -277,8 +287,12 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
-    function _isBorrowPaused() internal pure override returns (bool) {
-        return false;
+    function _isBorrowPaused() internal view override returns (bool) {
+        // When the branch TCR falls below the CCR, BorrowerOperations blocks `withdrawBold()`,
+        // in that case we should not attempt to borrow.
+        // When TCR >= CCR, our own target (<= 90% of MCR) is stricter than the CCR requirement,
+        // so don’t need to impose an additional cap in `_maxBorrowAmount()`
+        return _isTCRBelowCCR();
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -295,24 +309,20 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @inheritdoc BaseLenderBorrower
     function _maxBorrowAmount() internal view override returns (uint256) {
-        // When the branch TCR falls below the CCR, BorrowerOperations blocks `withdrawBold()`,
-        // in that case we should not attempt to borrow.
-        // When TCR >= CCR, our own target (<= 90% of MCR) is stricter than the CCR requirement,
-        // so don’t need to impose an additional cap here
-        return _isTCRBelowCCR() ? 0 : type(uint256).max;
+        return type(uint256).max;
     }
 
     /// @inheritdoc BaseLenderBorrower
     function getNetBorrowApr(
         uint256 /*_newAmount*/
-    ) public view override returns (uint256) {
+    ) public pure override returns (uint256) {
         return 0; // Assumes always profitable to borrow
     }
 
     /// @inheritdoc BaseLenderBorrower
     function getNetRewardApr(
         uint256 /*_newAmount*/
-    ) public view override returns (uint256) {
+    ) public pure override returns (uint256) {
         return 1; // Assumes always profitable to borrow
     }
 
@@ -403,10 +413,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @inheritdoc BaseLenderBorrower
     function _tendTrigger() internal view override returns (bool) {
         // If base fee is acceptable and we have a borrow token surplus (likely from redemption/liquidation),
-        // tend to (1) minimize exchange rate exposure and (2) minimize the risk of someone uses our borrowing capacity
+        // tend to (1) minimize exchange rate exposure and (2) minimize the risk of someone using our borrowing capacity
         // before we manage to borrow again, such that any new debt we take will lead to TCR < CCR
         //
-        // (2) chain of events: [1] we are redeemed [2] we have no debt but some collateral in the system
+        // (2) chain of events: [1] we are redeemed [2] we have no debt but some collateral
         // [3] someone hops in and uses our collateral to borrow above CCR [4] we cannot take new debt because it will lead to TCR < CCR
         if (_isBaseFeeAcceptable() && hasBorrowTokenSurplus()) return true;
 

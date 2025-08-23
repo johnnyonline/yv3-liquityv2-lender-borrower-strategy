@@ -350,4 +350,10 @@ contract Setup is Test, IEvents {
         );
     }
 
+    function simulateTCRLessThanCCR() internal {
+        assertGt(strategy.availableDepositLimit(user), 0, "!availableDepositLimit");
+        dropCollateralPrice();
+        assertEq(strategy.availableDepositLimit(user), 0, "!TCR<CCR"); // borrow is paused when TCR < CCR
+    }
+
 }

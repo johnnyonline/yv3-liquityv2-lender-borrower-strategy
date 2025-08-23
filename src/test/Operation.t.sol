@@ -11,20 +11,11 @@ import {
     IStrategy,
     IStrategyInterface
 } from "./utils/Setup.sol";
-// @todo -- test test_operation_redemptionToZombie_notProfitableAnymore(ToBorrow)
-// @todo -- go through all tests, cleanup, look for uncovered scenarios
-// @todo -- what happens if we want to close the strategy? last depositor? onEmergencyWithdraw?
-// @todo -- test `hasBorrowTokenSurplus`
-// @todo -- test tend has more idle than when it's called (after sell rewards)
-// @todo -- test _isTCRBelowCCR
-// @todo -- test IR adjustment (fees mostly)
-// @todo -- test close trove when TCR < CCR
-// @todo -- test redeemed, someone else uses our borrowing capacity such that any new debt we add leads to TCR < CCR so we revert?
-// @todo -- test liquidation/redemption when TCR < CCR
 
 contract OperationTest is Setup {
 
     error NotEnoughBoldBalance();
+    error TCRBelowCCR();
 
     function setUp() public virtual override {
         super.setUp();
@@ -445,6 +436,68 @@ contract OperationTest is Setup {
         assertEq(loss, 0, "!loss");
     }
 
+    function test_operation_redemptionToZombie_whenTCRLessThanCCR(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Simulate a redemption that leads to a zombie trove
+        simulateCollateralRedemption(strategy.balanceOfDebt() * 10, true);
+
+        // Check debt decreased
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+        assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
+
+        // Borrow token surplus to claim
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!hasBorrowTokenSurplus");
+
+        // Borrow token surplus to sell
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "hasBorrowTokenSurplus");
+
+        // Simulate price drop such that TCR < CCR
+        simulateTCRLessThanCCR();
+
+        // Sell the surplus
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the surplus
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellSurplus");
+
+        // Report profit (doesn't leverage bc needs to exit zombie mode)
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit"); // If no price swinges / other costs, being redeemed is actually profitable
+        assertEq(loss, 0, "!loss");
+        assertLt(strategy.getCurrentLTV(), targetLTV, "!ltv");
+
+        // Can't get our trove out of zombie mode because TCR < CCR
+        (uint256 _upperHint, uint256 _lowerHint) = findHints();
+        vm.prank(emergencyAdmin);
+        vm.expectRevert(TCRBelowCCR.selector);
+        strategy.adjustZombieTrove(_upperHint, _lowerHint);
+    }
+
     function test_operation_redemptionNoZombie(
         uint256 _amount
     ) public {
@@ -501,6 +554,63 @@ contract OperationTest is Setup {
         // Check return Values
         assertGt(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
+    }
+
+    function test_operation_redemptionNoZombie_whenTCRLessThanCCR(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Simulate a redemption that doesnt lead to a zombie trove
+        simulateCollateralRedemption(strategy.balanceOfDebt() / 10, false);
+
+        uint256 collateralAfterRedemption = strategy.balanceOfCollateral();
+        uint256 assetBalanceAfterRedemption = strategy.balanceOfAsset();
+
+        // Simulate price drop such that TCR < CCR
+        simulateTCRLessThanCCR();
+
+        // Check debt decreased
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+
+        // Borrow token surplus to sell
+        assertTrue(strategy.hasBorrowTokenSurplus(), "!hasBorrowTokenSurplus");
+
+        // Surplus to sell
+        (bool trigger,) = strategy.tendTrigger();
+        assertTrue(trigger, "sellSurplus");
+
+        // Sell the surplus
+        vm.prank(keeper);
+        strategy.tend();
+
+        // We sold the surplus
+        (trigger,) = strategy.tendTrigger();
+        assertFalse(trigger, "!sellSurplus");
+
+        // We didn't deposit the collateral
+        assertEq(strategy.balanceOfCollateral(), collateralAfterRedemption, "!collateral");
+
+        // Instead, it just sits in the contract
+        assertGt(strategy.balanceOfAsset(), assetBalanceAfterRedemption, "!assets");
     }
 
     function test_operation_redemption_withLoss(
@@ -660,7 +770,7 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, 0, 0, 0);
     }
 
-    function test_operation_liquidation( // @todo -- do we get back some of the eth gas comp on liquidation?
+    function test_operation_liquidation(
         uint256 _amount
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
@@ -727,6 +837,163 @@ contract OperationTest is Setup {
         strategy.redeem(strategistDeposit, strategist, strategist, 0);
 
         checkStrategyTotals(strategy, 0, 0, 0);
+    }
+
+    function test_closeTrove_whenTCRLessThanCCR(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Set protocol fee to 0 and perf fee to 0
+        setFees(0, 0);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+
+        balanceBefore = asset.balanceOf(strategist);
+        uint256 wethBalanceBefore = ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management());
+
+        // Earn a bit
+        simulateEarningInterest();
+
+        // Simulate price drop such that TCR < CCR
+        simulateTCRLessThanCCR();
+
+        // Shutdown the strategy (can't repay entire debt without)
+        vm.startPrank(emergencyAdmin);
+        strategy.shutdownStrategy();
+        vm.expectRevert(TCRBelowCCR.selector); // we might be cooked if this happens (and does not fix itself)
+        strategy.emergencyWithdraw(type(uint256).max);
+        vm.stopPrank();
+    }
+
+    function test_withdraw_whenTCRLessThanCCR(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Set protocol fee to 0 and perf fee to 0
+        setFees(0, 0);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Simulate price drop such that TCR < CCR
+        simulateTCRLessThanCCR();
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        // Withdraw when TCR < CCR only repays debt, but can't get any collateral out
+        assertEq(asset.balanceOf(user), balanceBefore, "!final balance");
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+    }
+
+    function test_hasBorrowTokenSurplus_absoluteFloor() public {
+        // Set the absolute floor pretty high
+        vm.startPrank(management);
+        strategy.setSurplusFloors(1000 ether, strategy.minSurplusRelative());
+        vm.stopPrank();
+
+        // Strategist makes initial deposit and opens a trove
+        strategistDepositAndOpenTrove(true);
+
+        // No surplus to begin with
+        assertFalse(strategy.hasBorrowTokenSurplus());
+
+        uint256 toAirdrop = strategy.minSurplusAbsolute();
+
+        // Upfront fee makes it so there's still no surplus
+        airdrop(ERC20(strategy.borrowToken()), address(strategy), toAirdrop);
+        assertFalse(strategy.hasBorrowTokenSurplus());
+
+        // Airdrop to pass the floor
+        airdrop(ERC20(strategy.borrowToken()), address(strategy), toAirdrop / 100);
+        assertTrue(strategy.hasBorrowTokenSurplus());
+    }
+
+    function test_hasBorrowTokenSurplus_relativeFloor() public {
+        // Set the absolute floor to zero
+        vm.startPrank(management);
+        strategy.setSurplusFloors(0, strategy.minSurplusRelative());
+        vm.stopPrank();
+
+        // Strategist makes initial deposit and opens a trove
+        strategistDepositAndOpenTrove(true);
+
+        // No surplus to begin with
+        assertFalse(strategy.hasBorrowTokenSurplus());
+
+        uint256 toAirdrop = strategy.balanceOfDebt() * strategy.minSurplusRelative() / MAX_BPS;
+
+        // Upfront fee makes it so there's still no surplus
+        airdrop(ERC20(strategy.borrowToken()), address(strategy), toAirdrop);
+        assertFalse(strategy.hasBorrowTokenSurplus());
+
+        // Airdrop to pass the floor
+        airdrop(ERC20(strategy.borrowToken()), address(strategy), toAirdrop / 2);
+        assertTrue(strategy.hasBorrowTokenSurplus());
     }
 
 }

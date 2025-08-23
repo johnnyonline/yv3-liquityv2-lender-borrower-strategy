@@ -59,22 +59,32 @@ contract OwnerTest is Setup {
         strategy.buyBorrowToken(0);
     }
 
-    // function test_setDustThreshold( // @todo -- also test setSurplusFloors
-    //     uint256 _newDustThreshold
-    // ) public {
-    //     vm.prank(management);
-    //     strategy.setDustThreshold(_newDustThreshold);
-    //     assertEq(strategy.dustThreshold(), _newDustThreshold);
-    // }
+    function test_setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) public {
+        vm.assume(_minSurplusRelative <= MAX_BPS / 10);
+        vm.prank(management);
+        strategy.setSurplusFloors(_minSurplusAbsolute, _minSurplusRelative);
+        assertEq(strategy.minSurplusAbsolute(), _minSurplusAbsolute);
+        assertEq(strategy.minSurplusRelative(), _minSurplusRelative);
+    }
 
-    // function test_setDustThreshold_wrongCaller(
-    //     address _wrongCaller
-    // ) public {
-    //     vm.assume(_wrongCaller != management);
-    //     vm.expectRevert("!management");
-    //     vm.prank(_wrongCaller);
-    //     strategy.setDustThreshold(0);
-    // }
+    function test_setSurplusFloors_wrongCaller(
+        address _wrongCaller
+    ) public {
+        vm.assume(_wrongCaller != management);
+        vm.expectRevert("!management");
+        vm.prank(_wrongCaller);
+        strategy.setSurplusFloors(0, 0);
+    }
+
+    function test_setSurplusFloors_relativeSurplusTooHigh(
+        uint256 _minSurplusAbsolute,
+        uint256 _minSurplusRelative
+    ) public {
+        vm.assume(_minSurplusRelative > MAX_BPS / 10);
+        vm.prank(management);
+        vm.expectRevert("!relativeSurplus");
+        strategy.setSurplusFloors(_minSurplusAbsolute, _minSurplusRelative);
+    }
 
     function test_setAllowed(
         address _newAllowed
