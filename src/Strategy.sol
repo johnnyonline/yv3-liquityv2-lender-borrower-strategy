@@ -3,10 +3,10 @@ pragma solidity 0.8.24;
 
 import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {LiquityMath} from "@liquity/dependencies/LiquityMath.sol";
 
 import {TroveOps} from "./libraries/TroveOps.sol";
 import {LenderOps} from "./libraries/LenderOps.sol";
+import {LiquityMath} from "./libraries/LiquityMath.sol";
 
 import {IExchange} from "./interfaces/IExchange.sol";
 import {AggregatorInterface} from "./interfaces/AggregatorInterface.sol";

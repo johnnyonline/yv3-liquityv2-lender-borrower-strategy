@@ -10,7 +10,6 @@ remappings = [
     "@tokenized-strategy/=lib/tokenized-strategy/src/",
     "@periphery/=lib/tokenized-strategy-periphery/src/",
     "@yearn-vaults/=lib/yearn-vaults-v3/contracts/",
-    "@liquity/=lib/bold/contracts/src/",
 ]
 
 [fmt]
