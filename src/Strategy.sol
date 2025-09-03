@@ -18,7 +18,6 @@ import {
 } from "./interfaces/IAddressesRegistry.sol";
 
 import {BaseLenderBorrower, ERC20, Math} from "./BaseLenderBorrower.sol";
-import "forge-std/console2.sol";
 
 contract LiquityV2LBStrategy is BaseLenderBorrower {
 
@@ -308,7 +307,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
-    function _maxBorrowAmount() internal view override returns (uint256) {
+    function _maxBorrowAmount() internal pure override returns (uint256) {
         return type(uint256).max;
     }
 
