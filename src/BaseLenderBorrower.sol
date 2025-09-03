@@ -10,7 +10,6 @@ import {BaseHealthCheck, ERC20} from "@periphery/Bases/HealthCheck/BaseHealthChe
 /**
  * @title Base Lender Borrower
  */
-
 abstract contract BaseLenderBorrower is BaseHealthCheck {
 
     using SafeERC20 for ERC20;
