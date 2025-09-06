@@ -56,10 +56,10 @@ library LenderOps {
             uint256 _shares =
                 Math.min(_vault.previewWithdraw(_amount), _staker.previewRedeem(_staker.balanceOf(address(this))));
 
-            // How much st-yBOLD
+            // How much ysyBOLD
             _shares = _staker.previewWithdraw(_shares);
 
-            // Redeem st-yBOLD to yBOLD
+            // Redeem ysyBOLD to yBOLD
             _shares = _staker.redeem(_shares, address(this), address(this));
 
             // Redeem yBOLD to BOLD
