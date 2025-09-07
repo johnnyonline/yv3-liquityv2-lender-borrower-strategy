@@ -89,6 +89,7 @@ contract OwnerTest is Setup {
     function test_setAllowed(
         address _newAllowed
     ) public {
+        vm.assume(_newAllowed != strategist && _newAllowed != user);
         assertFalse(strategy.allowed(_newAllowed));
         vm.startPrank(management);
         strategy.setAllowed(_newAllowed, true);
