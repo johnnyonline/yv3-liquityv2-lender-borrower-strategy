@@ -110,8 +110,8 @@ contract OwnerTest is Setup {
     function test_sweep_wrongCaller(
         address _wrongCaller
     ) public {
-        vm.assume(_wrongCaller != strategy.GOV());
-        vm.expectRevert("!governance");
+        vm.assume(_wrongCaller != management);
+        vm.expectRevert("!management");
         vm.prank(_wrongCaller);
         strategy.sweep(address(0));
     }

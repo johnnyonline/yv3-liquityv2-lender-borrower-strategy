@@ -185,27 +185,21 @@ contract ShutdownTest is Setup {
         airdrop(asset, address(strategy), _amount);
         airdrop(borrowToken, address(strategy), _amount);
 
-        vm.expectRevert("!governance");
+        vm.expectRevert("!management");
         vm.prank(user);
         strategy.sweep(address(borrowToken));
 
-        vm.expectRevert("!governance");
+        // Sweep Base token
+        uint256 beforeBalance = borrowToken.balanceOf(management);
+
         vm.prank(management);
         strategy.sweep(address(borrowToken));
 
-        address gov = strategy.GOV();
-
-        // Sweep Base token
-        uint256 beforeBalance = borrowToken.balanceOf(gov);
-
-        vm.prank(gov);
-        strategy.sweep(address(borrowToken));
-
-        assertEq(ERC20(borrowToken).balanceOf(gov), beforeBalance + _amount, "base swept");
+        assertEq(ERC20(borrowToken).balanceOf(management), beforeBalance + _amount, "base swept");
 
         // Cant sweep asset
         vm.expectRevert("!asset");
-        vm.prank(gov);
+        vm.prank(management);
         strategy.sweep(address(asset));
     }
 

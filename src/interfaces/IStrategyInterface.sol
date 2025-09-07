@@ -20,7 +20,6 @@ interface IStrategyInterface is ILenderBorrower {
     // Constants
     // ===============================================================
 
-    function GOV() external view returns (address);
     function VAULT_APR_ORACLE() external view returns (address);
     function PRICE_FEED() external view returns (address);
     function BORROWER_OPERATIONS() external view returns (address);

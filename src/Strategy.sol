@@ -49,9 +49,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Maximum relative surplus required (in basis points) before tending is considered
     uint256 private constant _MAX_RELATIVE_SURPLUS = 1000; // 10%
 
-    /// @notice The governance address, only one that is able to `sweep()`
-    address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
-
     /// @notice WETH token
     ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -200,14 +197,13 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         allowed[_address] = _allowed;
     }
 
-    /// @notice Sweep of non-asset ERC20 tokens to governance
+    /// @notice Sweep of non-asset ERC20 tokens
     /// @param _token The ERC20 token to sweep
     function sweep(
         ERC20 _token
-    ) external {
-        require(msg.sender == GOV, "!governance");
+    ) external onlyManagement {
         require(_token != asset, "!asset");
-        _token.safeTransfer(GOV, _token.balanceOf(address(this)));
+        _token.safeTransfer(TokenizedStrategy.management(), _token.balanceOf(address(this)));
     }
 
     // ===============================================================
