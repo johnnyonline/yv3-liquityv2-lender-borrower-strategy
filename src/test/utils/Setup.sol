@@ -7,9 +7,11 @@ import {Test} from "forge-std/Test.sol";
 import {ETHToBOLDExchange as Exchange} from "../../periphery/Exchange.sol";
 import {
     LiquityV2LBStrategy as Strategy,
+    LiquityMath,
     ERC20,
     AggregatorInterface,
     IAddressesRegistry,
+    IBorrowerOperations,
     IExchange,
     IStrategy
 } from "../../Strategy.sol";
@@ -354,6 +356,42 @@ contract Setup is Test, IEvents {
         assertGt(strategy.availableDepositLimit(user), 0, "!availableDepositLimit");
         dropCollateralPrice();
         assertEq(strategy.availableDepositLimit(user), 0, "!TCR<CCR"); // borrow is paused when TCR < CCR
+    }
+
+    function setTCRJustAboveCCR() internal {
+        IBorrowerOperations borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
+        uint256 ccr = borrowerOperations.CCR();
+        uint256 target = (ccr * 1001) / 1000; // CCR + 0.1%
+
+        uint256 coll = borrowerOperations.getEntireBranchColl();
+        uint256 debt = borrowerOperations.getEntireBranchDebt();
+        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
+        uint256 price = uint256(oracle.latestAnswer()) * 1e10;
+
+        uint256 currentTCR = (coll * price) / debt;
+        uint256 factor = (target * 1e18) / currentTCR;
+
+        int256 newAnswer = int256((uint256(oracle.latestAnswer()) * factor) / 1e18);
+
+        vm.mockCall(
+            address(oracle), abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector), abi.encode(newAnswer)
+        );
+
+        (uint80 roundId,, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
+        vm.mockCall(
+            address(oracle),
+            abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
+            abi.encode(roundId, newAnswer, startedAt, block.timestamp, answeredInRound)
+        );
+    }
+
+    function calcTCR() internal view returns (uint256) {
+        IBorrowerOperations borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
+        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
+        uint256 price = uint256(oracle.latestAnswer()) * 1e10;
+        return LiquityMath._computeCR(
+            borrowerOperations.getEntireBranchColl(), borrowerOperations.getEntireBranchDebt(), price
+        );
     }
 
 }

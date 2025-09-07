@@ -882,9 +882,6 @@ contract OperationTest is Setup {
 
         assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
 
-        balanceBefore = asset.balanceOf(strategist);
-        uint256 wethBalanceBefore = ERC20(tokenAddrs["WETH"]).balanceOf(strategy.management());
-
         // Earn a bit
         simulateEarningInterest();
 
@@ -947,6 +944,67 @@ contract OperationTest is Setup {
 
         // Withdraw when TCR < CCR only repays debt, but can't get any collateral out
         assertEq(asset.balanceOf(user), balanceBefore, "!final balance");
+        assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
+    }
+
+    // Different from `test_withdraw_whenTCRLessThanCCR` in that there should be _some_ collateral returned
+    function test_withdraw_whenTCRIsSlightlyMoreThanCCR(
+        uint256 _amount
+    ) public {
+        vm.assume(_amount > 10 ether && _amount < maxFuzzAmount);
+
+        // Setting more conservative LTV multipliers so when we repay we worsen the TCR
+        vm.prank(management);
+        strategy.setLtvMultipliers(1000, 2000);
+
+        // Set protocol fee to 0 and perf fee to 0
+        setFees(0, 0);
+
+        // Strategist makes initial deposit and opens a trove
+        uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
+
+        assertEq(strategy.totalAssets(), strategistDeposit, "!strategistTotalAssets");
+
+        uint256 targetLTV = (strategy.getLiquidateCollateralFactor() * strategy.targetLTVMultiplier()) / MAX_BPS;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        checkStrategyTotals(strategy, _amount + strategistDeposit, _amount + strategistDeposit, 0);
+        assertEq(strategy.totalAssets(), _amount + strategistDeposit, "!totalAssets");
+        assertApproxEqRel(strategy.getCurrentLTV(), targetLTV, 1e15); // 0.1%
+        assertApproxEqAbs(strategy.balanceOfCollateral(), _amount + strategistDeposit, 3, "!balanceOfCollateral");
+        assertApproxEqRel(strategy.balanceOfDebt(), strategy.balanceOfLentAssets(), 1e15); // 0.1%
+
+        // Earn Interest
+        simulateEarningInterest();
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Simulate price drop such that TCR is very close to CCR
+        setTCRJustAboveCCR();
+
+        uint256 debtBefore = strategy.balanceOfDebt();
+
+        // Fails if want to withdraw without loss
+        vm.prank(user);
+        vm.expectRevert("too much loss");
+        strategy.redeem(_amount, user, user, 0);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        // Withdraw when TCR is very close to CCR repays debt and can get only _some_ collateral out
+        assertGt(asset.balanceOf(user), balanceBefore, "!final balance");
         assertLt(strategy.balanceOfDebt(), debtBefore, "!debt");
     }
 

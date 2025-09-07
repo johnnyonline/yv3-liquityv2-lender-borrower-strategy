@@ -44,16 +44,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
 
     /// @notice The difference in decimals between our price oracle (1e8) and Liquity's price oracle (1e18)
-    uint256 private constant DECIMALS_DIFF = 1e10;
+    uint256 private constant _DECIMALS_DIFF = 1e10;
 
     /// @notice Maximum relative surplus required (in basis points) before tending is considered
-    uint256 private constant MAX_RELATIVE_SURPLUS = 1000; // 10%
+    uint256 private constant _MAX_RELATIVE_SURPLUS = 1000; // 10%
 
     /// @notice The governance address, only one that is able to `sweep()`
     address public constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
 
     /// @notice WETH token
-    ERC20 private constant WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     /// @notice Same Chainlink price feed as used by the Liquity branch
     AggregatorInterface public immutable PRICE_FEED;
@@ -114,7 +114,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
-        if (asset != WETH) WETH.forceApprove(address(BORROWER_OPERATIONS), TroveOps.ETH_GAS_COMPENSATION);
+        if (asset != _WETH) _WETH.forceApprove(address(BORROWER_OPERATIONS), TroveOps.ETH_GAS_COMPENSATION);
     }
 
     // ===============================================================
@@ -183,7 +183,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @param _minSurplusAbsolute Absolute minimum surplus required, in borrow token units
     /// @param _minSurplusRelative Relative minimum surplus required, as basis points of current debt
     function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external onlyManagement {
-        require(_minSurplusRelative <= MAX_RELATIVE_SURPLUS, "!relativeSurplus");
+        require(_minSurplusRelative <= _MAX_RELATIVE_SURPLUS, "!relativeSurplus");
         minSurplusAbsolute = _minSurplusAbsolute;
         minSurplusRelative = _minSurplusRelative;
     }
@@ -267,9 +267,25 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
+    /// @dev Returns the maximum collateral that can be withdrawn without reducing
+    ///      the branch’s total collateral ratio (TCR) below the critical collateral ratio (CCR).
+    ///      Withdrawal is limited by both:
+    ///        - the CCR constraint at the branch level, and
+    ///        - the base withdrawal constraints in BaseLenderBorrower
     function _maxWithdrawal() internal view override returns (uint256) {
-        // BorrowerOperations blocks `withdrawColl()` when TCR < CCR
-        return _isTCRBelowCCR() ? 0 : BaseLenderBorrower._maxWithdrawal();
+        // Cache values for later use
+        uint256 _price = _getPrice(address(asset)) * _DECIMALS_DIFF;
+        uint256 _branchDebt = BORROWER_OPERATIONS.getEntireBranchDebt();
+        uint256 _branchCollateral = BORROWER_OPERATIONS.getEntireBranchColl();
+
+        // Collateral required to keep TCR >= CCR
+        uint256 _requiredColl = Math.ceilDiv(BORROWER_OPERATIONS.CCR() * _branchDebt, _price);
+
+        // Max collateral removable while staying >= CCR
+        uint256 _headroomByCCR = _branchCollateral > _requiredColl ? _branchCollateral - _requiredColl : 0;
+
+        // Final cap is the tighter of CCR constraint and base withdrawal cap
+        return Math.min(_headroomByCCR, BaseLenderBorrower._maxWithdrawal());
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -277,7 +293,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         address _asset
     ) internal view override returns (uint256) {
         // Not bothering with price feed checks becase it's the same one Liquity uses
-        return _asset == borrowToken ? WAD / DECIMALS_DIFF : uint256(PRICE_FEED.latestAnswer());
+        return _asset == borrowToken ? WAD / _DECIMALS_DIFF : uint256(PRICE_FEED.latestAnswer());
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -298,7 +314,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _isLiquidatable() internal view override returns (bool) {
         // `getCurrentICR()` expects the price to be in 1e18 format
         return
-            TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * DECIMALS_DIFF) < BORROWER_OPERATIONS.MCR();
+            TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * _DECIMALS_DIFF) < BORROWER_OPERATIONS.MCR();
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -368,7 +384,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         return LiquityMath._computeCR(
             BORROWER_OPERATIONS.getEntireBranchColl(),
             BORROWER_OPERATIONS.getEntireBranchDebt(),
-            _getPrice(address(asset)) * DECIMALS_DIFF // LiquityMath expects 1e18 format
+            _getPrice(address(asset)) * _DECIMALS_DIFF // LiquityMath expects 1e18 format
         ) < BORROWER_OPERATIONS.CCR();
     }
 
