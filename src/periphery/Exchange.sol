@@ -39,10 +39,10 @@ contract ETHToBOLDExchange is IExchange {
     // ===============================================================
 
     constructor() {
-        BOLD.safeApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
-        USDC.safeApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
-        USDC.safeApprove(address(TRICRYPTO), type(uint256).max);
-        WETH.safeApprove(address(TRICRYPTO), type(uint256).max);
+        BOLD.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
+        USDC.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
+        USDC.forceApprove(address(TRICRYPTO), type(uint256).max);
+        WETH.forceApprove(address(TRICRYPTO), type(uint256).max);
     }
 
     // ============================================================================================
