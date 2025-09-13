@@ -33,23 +33,13 @@ contract OperationTest is Setup {
         assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
         assertEq(strategy.TROVE_MANAGER(), troveManager);
         assertEq(strategy.EXCHANGE(), address(exchange));
-        assertEq(strategy.STAKED_LENDER_VAULT(), stybold);
+        assertEq(strategy.STAKED_LENDER_VAULT(), address(lenderVault));
     }
 
     function test_invalidDeployment() public {
         vm.expectRevert("!exchange");
         strategyFactory.newStrategy(
             IAddressesRegistry(wrongAddressesRegistry),
-            IStrategy(address(lenderVault)),
-            AggregatorInterface(address(0)),
-            IExchange(address(exchange)),
-            "Tokenized Strategy"
-        );
-
-        vm.expectRevert();
-        strategyFactory.newStrategy(
-            IAddressesRegistry(addressesRegistry),
-            IStrategy(tokenAddrs["YFI"]),
             AggregatorInterface(address(0)),
             IExchange(address(exchange)),
             "Tokenized Strategy"
@@ -58,7 +48,6 @@ contract OperationTest is Setup {
         vm.expectRevert("!priceFeed");
         strategyFactory.newStrategy(
             IAddressesRegistry(addressesRegistry),
-            IStrategy(address(lenderVault)),
             AggregatorInterface(address(tokenAddrs["YFI"])),
             IExchange(address(exchange)),
             "Tokenized Strategy"
@@ -67,7 +56,6 @@ contract OperationTest is Setup {
         vm.expectRevert();
         strategyFactory.newStrategy(
             IAddressesRegistry(addressesRegistry),
-            IStrategy(address(lenderVault)),
             AggregatorInterface(address(0)),
             IExchange(address(0)),
             "Tokenized Strategy"

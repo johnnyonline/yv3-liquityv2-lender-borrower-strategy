@@ -52,6 +52,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice WETH token
     ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
+    /// @notice The staked lender vault contract
+    IStrategy public constant STAKED_LENDER_VAULT = IStrategy(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
+
     /// @notice Same Chainlink price feed as used by the Liquity branch
     AggregatorInterface public immutable PRICE_FEED;
 
@@ -67,21 +70,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice The exchange contract for buying/selling the borrow token
     IExchange public immutable EXCHANGE;
 
-    /// @notice The staked lender vault contract (i.e. ysyBOLD)
-    IStrategy public immutable STAKED_LENDER_VAULT;
-
     // ===============================================================
     // Constructor
     // ===============================================================
 
     /// @param _addressesRegistry The Liquity addresses registry contract
-    /// @param _stakedLenderVault The staked lender vault contract
     /// @param _priceFeed The price feed contract for the `asset`
     /// @param _exchange The exchange contract for buying/selling borrow token
     /// @param _name The name of the strategy
     constructor(
         IAddressesRegistry _addressesRegistry,
-        IStrategy _stakedLenderVault,
         AggregatorInterface _priceFeed,
         IExchange _exchange,
         string memory _name
@@ -90,7 +88,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             _addressesRegistry.collToken(), // asset
             _name,
             _addressesRegistry.boldToken(), // borrowToken
-            _stakedLenderVault.asset() // lenderVault
+            STAKED_LENDER_VAULT.asset() // lenderVault
         )
     {
         require(_exchange.BORROW() == borrowToken && _exchange.COLLATERAL() == address(asset), "!exchange");
@@ -105,7 +103,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
         require(PRICE_FEED.decimals() == 8, "!priceFeed");
         EXCHANGE = _exchange;
-        STAKED_LENDER_VAULT = _stakedLenderVault;
 
         ERC20(address(lenderVault)).forceApprove(address(STAKED_LENDER_VAULT), type(uint256).max);
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);

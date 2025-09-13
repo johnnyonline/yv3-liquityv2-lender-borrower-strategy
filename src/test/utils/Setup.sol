@@ -44,8 +44,7 @@ interface IFactory {
 contract Setup is Test, IEvents {
 
     // Token addresses used in the tests.
-    address public stybold = 0x23346B04a7f55b8760E5860AA5A77383D63491cD; // st-yBOLD
-    IStrategyInterface public lenderVault = IStrategyInterface(stybold);
+    IStrategyInterface public lenderVault = IStrategyInterface(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
 
     // Liquity WETH
     address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
@@ -130,7 +129,6 @@ contract Setup is Test, IEvents {
             address(
                 strategyFactory.newStrategy(
                     IAddressesRegistry(addressesRegistry),
-                    IStrategy(stybold),
                     AggregatorInterface(address(0)),
                     IExchange(address(exchange)),
                     "Tokenized Strategy"
