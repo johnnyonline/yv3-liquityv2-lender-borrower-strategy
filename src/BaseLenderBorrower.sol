@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.24;
+pragma solidity ^0.8.18;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
@@ -42,7 +42,6 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
     uint256 public maxGasPriceToTend;
 
     /// Thresholds: lower limit on how much base token can be borrowed at a time.
-    // slither-disable-next-line uninitialized-state
     uint256 internal minAmountToBorrow;
 
     /// The lender vault that will be used to lend and borrow.
@@ -918,7 +917,8 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
     function _emergencyWithdraw(
         uint256 _amount
     ) internal virtual override {
-        if (_amount > 0) _withdrawBorrowToken(Math.min(_amount, _lenderMaxWithdraw()));
+        _amount = Math.min(_amount, _lenderMaxWithdraw());
+        if (_amount > 0) _withdrawBorrowToken(_amount);
 
         // Repay everything we can.
         _repayTokenDebt();
