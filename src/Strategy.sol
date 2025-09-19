@@ -285,7 +285,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _getPrice(
         address _asset
     ) internal view override returns (uint256) {
-        // Not bothering with price feed checks becase it's the same one Liquity uses
+        // Not bothering with price feed checks because it's the same one Liquity uses
         return _asset == borrowToken ? WAD / _DECIMALS_DIFF : uint256(PRICE_FEED.latestAnswer());
     }
 

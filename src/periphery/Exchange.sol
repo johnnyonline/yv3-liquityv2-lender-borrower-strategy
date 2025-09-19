@@ -71,7 +71,7 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _fromBorrow If true, swap from borrow token to the collateral token, false otherwise
     /// @return Amount of tokens received
     function swap(uint256 _amount, uint256 _minAmount, bool _fromBorrow) external override returns (uint256) {
-        return (_fromBorrow ? _swapFrom(_amount, _minAmount) : _swapTo(_amount, _minAmount));
+        return _fromBorrow ? _swapFrom(_amount, _minAmount) : _swapTo(_amount, _minAmount);
     }
 
     /// @notice Sweep tokens from the contract
