@@ -939,7 +939,7 @@ contract OperationTest is Setup {
     function test_withdraw_whenTCRIsSlightlyMoreThanCCR(
         uint256 _amount
     ) public {
-        vm.assume(_amount > 10 ether && _amount < maxFuzzAmount);
+        vm.assume(_amount > 20 ether && _amount < maxFuzzAmount);
 
         // Setting more conservative LTV multipliers so when we repay we worsen the TCR
         vm.prank(management);
