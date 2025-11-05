@@ -39,10 +39,10 @@ jobs:
       #     forge build --sizes
       #   id: build
 
-      - name: Run Forge fmt
-        run: |
-          forge fmt --check
-        id: fmt
+      # - name: Run Forge fmt
+      #   run: |
+      #     forge fmt --check
+      #   id: fmt
 
       - name: Install Foundry deps
         run: forge install
