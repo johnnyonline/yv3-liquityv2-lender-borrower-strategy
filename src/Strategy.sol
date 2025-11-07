@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.24;
 
-import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {TroveOps} from "./libraries/TroveOps.sol";
@@ -52,9 +51,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice WETH token
     ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    /// @notice The staked lender vault contract
-    IStrategy public constant STAKED_LENDER_VAULT = IStrategy(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
-
     /// @notice Same Chainlink price feed as used by the Liquity branch
     AggregatorInterface public immutable PRICE_FEED;
 
@@ -88,7 +84,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             _addressesRegistry.collToken(), // asset
             _name,
             _addressesRegistry.boldToken(), // borrowToken
-            STAKED_LENDER_VAULT.asset() // lenderVault
+            address(0x89E93172AEF8261Db8437b90c3dCb61545a05317) // lenderVault (sUSDaf)
         )
     {
         require(_exchange.BORROW() == borrowToken && _exchange.COLLATERAL() == address(asset), "!exchange");
@@ -104,7 +100,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         require(PRICE_FEED.decimals() == 8, "!priceFeed");
         EXCHANGE = _exchange;
 
-        ERC20(address(lenderVault)).forceApprove(address(STAKED_LENDER_VAULT), type(uint256).max);
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
@@ -286,7 +281,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         address _asset
     ) internal view override returns (uint256) {
         // Not bothering with price feed checks because it's the same one Liquity uses
-        return _asset == borrowToken ? WAD / _DECIMALS_DIFF : uint256(PRICE_FEED.latestAnswer());
+        (, int256 _answer,,,) = PRICE_FEED.latestRoundData();
+        return _asset == borrowToken ? WAD / _DECIMALS_DIFF : uint256(_answer);
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -389,29 +385,29 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _lendBorrowToken(
         uint256 _amount
     ) internal override {
-        LenderOps.lend(STAKED_LENDER_VAULT, lenderVault, _amount);
+        LenderOps.lend(lenderVault, _amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _withdrawBorrowToken(
         uint256 _amount
     ) internal override {
-        LenderOps.withdraw(STAKED_LENDER_VAULT, lenderVault, _amount);
+        LenderOps.withdraw(lenderVault, _amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _lenderMaxDeposit() internal view override returns (uint256) {
-        return LenderOps.maxDeposit(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.maxDeposit(lenderVault);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _lenderMaxWithdraw() internal view override returns (uint256) {
-        return LenderOps.maxWithdraw(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.maxWithdraw(lenderVault);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function balanceOfLentAssets() public view override returns (uint256) {
-        return LenderOps.balanceOfAssets(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.balanceOfAssets(lenderVault);
     }
 
     // ===============================================================

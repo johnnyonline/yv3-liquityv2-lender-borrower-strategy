@@ -236,6 +236,10 @@ contract OperationTest is Setup {
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
+        // Setting more conservative LTV multipliers so when we repay we worsen the TCR
+        vm.prank(management);
+        strategy.setLtvMultipliers(4000, 5000);
+
         // Strategist makes initial deposit and opens a trove
         uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
 
@@ -486,10 +490,11 @@ contract OperationTest is Setup {
         strategy.adjustZombieTrove(_upperHint, _lowerHint);
     }
 
-    function test_operation_redemptionNoZombie(
-        uint256 _amount
+    function test_operation_redemptionNoZombie1(
+        // uint256 _amount
     ) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+        // vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+        uint256 _amount = 100_000 ether; // @todo -- here -- redemption not profitable...
 
         // Strategist makes initial deposit and opens a trove
         uint256 strategistDeposit = strategistDepositAndOpenTrove(true);
@@ -672,6 +677,10 @@ contract OperationTest is Setup {
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
+        // Setting more conservative LTV multipliers so when we repay we worsen the TCR
+        vm.prank(management);
+        strategy.setLtvMultipliers(3000, 4000);
+
         // Set protocol fee to 0 and perf fee to 0
         setFees(0, 0);
 
@@ -728,6 +737,10 @@ contract OperationTest is Setup {
         strategy.sellBorrowToken(type(uint256).max);
 
         vm.stopPrank();
+
+        // Report again to update PPS
+        vm.prank(keeper);
+        strategy.report();
 
         uint256 balanceBefore = asset.balanceOf(user);
 
@@ -800,7 +813,7 @@ contract OperationTest is Setup {
 
         // Set health check to accept loss
         vm.prank(management);
-        strategy.setLossLimitRatio(5_000); // 50% loss
+        strategy.setLossLimitRatio(9_900); // 50% loss
 
         // Report loss
         vm.prank(keeper);

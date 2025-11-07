@@ -5,8 +5,7 @@ import {
     LiquityV2LBStrategy as Strategy,
     AggregatorInterface,
     IAddressesRegistry,
-    IExchange,
-    IStrategy
+    IExchange
 } from "./Strategy.sol";
 import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
 

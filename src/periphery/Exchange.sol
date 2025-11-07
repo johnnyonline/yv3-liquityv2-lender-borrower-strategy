@@ -2,14 +2,16 @@
 pragma solidity 0.8.24;
 
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 import {IExchange} from "../interfaces/IExchange.sol";
-import {ICurveTricrypto} from "../interfaces/ICurveTricrypto.sol";
+import {IYieldbasisPool} from "../interfaces/IYieldbasisPool.sol";
 import {ICurveStableSwapNG} from "../interfaces/ICurveStableSwapNG.sol";
 
-contract ETHToBOLDExchange is IExchange {
+contract tBTCToUSDafExchange is IExchange {
 
     using SafeERC20 for IERC20;
+    using SafeERC20 for IERC4626;
 
     // ===============================================================
     // Constants
@@ -18,31 +20,32 @@ contract ETHToBOLDExchange is IExchange {
     /// @notice Address of SMS on Mainnet
     address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
 
-    /// @notice BOLD/USDC Curve Pool
-    int128 private constant BOLD_INDEX_BOLD_USDC_CURVE_POOL = 0;
-    int128 private constant USDC_INDEX_BOLD_USDC_CURVE_POOL = 1;
-    ICurveStableSwapNG private constant BOLD_USDC_CURVE_POOL =
-        ICurveStableSwapNG(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
+    /// @notice scrvUSD/USDaf Curve Pool
+    int128 private constant SCRVUSD_INDEX_SCRVUSD_USDAF_CURVE_POOL = 0;
+    int128 private constant USDAF_INDEX_SCRVUSD_USDAF_CURVE_POOL = 1;
+    ICurveStableSwapNG private constant SCRVUSD_USDAF_CURVE_POOL = ICurveStableSwapNG(0x3bE454C4391690ab4DDae3Fb987c8147b8Ecc08A);
 
-    /// @notice WETH/USDC Curve Pool
-    uint256 private constant USDC_INDEX_USDC_WETH_POOL = 0;
-    uint256 private constant WETH_INDEX_USDC_WETH_POOL = 2;
-    ICurveTricrypto private constant TRICRYPTO = ICurveTricrypto(0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B);
+    /// @notice crvUSD/tBTC Yieldbasis Pool
+    uint256 private constant CRVUSD_INDEX_CRVUSD_TBTC_POOL = 0;
+    uint256 private constant TBTC_INDEX_CRVUSD_TBTC_POOL = 1;
+    IYieldbasisPool private constant CRVUSD_TBTC_YB_POOL = IYieldbasisPool(0xf1F435B05D255a5dBdE37333C0f61DA6F69c6127);
 
     /// @notice Token addresses
-    IERC20 private constant BOLD = IERC20(0x6440f144b7e50D6a8439336510312d2F54beB01D);
-    IERC20 private constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC4626 private constant SCRVUSD = IERC4626(0x0655977FEb2f289A4aB78af67BAB0d17aAb84367);
+    IERC20 private constant CRVUSD = IERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    IERC20 private constant USDAF = IERC20(0x9Cf12ccd6020b6888e4D4C4e4c7AcA33c1eB91f8);
+    IERC20 private constant TBTC = IERC20(0x18084fbA666a33d37592fA2633fD49a74DD93a88);
 
     // ===============================================================
     // Constructor
     // ===============================================================
 
     constructor() {
-        BOLD.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
-        USDC.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
-        USDC.forceApprove(address(TRICRYPTO), type(uint256).max);
-        WETH.forceApprove(address(TRICRYPTO), type(uint256).max);
+        SCRVUSD.forceApprove(address(SCRVUSD_USDAF_CURVE_POOL), type(uint256).max);
+        USDAF.forceApprove(address(SCRVUSD_USDAF_CURVE_POOL), type(uint256).max);
+        CRVUSD.forceApprove(address(CRVUSD_TBTC_YB_POOL), type(uint256).max);
+        TBTC.forceApprove(address(CRVUSD_TBTC_YB_POOL), type(uint256).max);
+        CRVUSD.forceApprove(address(SCRVUSD), type(uint256).max);
     }
 
     // ============================================================================================
@@ -52,13 +55,13 @@ contract ETHToBOLDExchange is IExchange {
     /// @notice Returns the address of the borrow token
     /// @return Address of the borrow token
     function BORROW() external pure override returns (address) {
-        return address(BOLD);
+        return address(USDAF);
     }
 
     /// @notice Returns the address of the collateral token
     /// @return Address of the collateral token
     function COLLATERAL() external pure override returns (address) {
-        return address(WETH);
+        return address(TBTC);
     }
 
     // ============================================================================================
@@ -95,25 +98,27 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _minAmount Minimum amount of collateral tokens to receive
     /// @return Amount of collateral tokens received
     function _swapFrom(uint256 _amount, uint256 _minAmount) internal returns (uint256) {
-        // Pull BOLD
-        BOLD.safeTransferFrom(msg.sender, address(this), _amount);
+        // Pull USDaf
+        USDAF.safeTransferFrom(msg.sender, address(this), _amount);
 
-        // BOLD --> USDC
-        uint256 _amountOut = BOLD_USDC_CURVE_POOL.exchange(
-            BOLD_INDEX_BOLD_USDC_CURVE_POOL,
-            USDC_INDEX_BOLD_USDC_CURVE_POOL,
+        // USDAf --> scrvUSD
+        uint256 _amountOut = SCRVUSD_USDAF_CURVE_POOL.exchange(
+            USDAF_INDEX_SCRVUSD_USDAF_CURVE_POOL,
+            SCRVUSD_INDEX_SCRVUSD_USDAF_CURVE_POOL,
             _amount,
             0, // minAmount
             address(this) // receiver
         );
 
-        // USDC --> ETH
-        _amountOut = TRICRYPTO.exchange(
-            USDC_INDEX_USDC_WETH_POOL,
-            WETH_INDEX_USDC_WETH_POOL,
+        // scrvUSD --> crvUSD
+        _amountOut = SCRVUSD.redeem(_amountOut, address(this), address(this));
+
+        // crvUSD --> tBTC
+        _amountOut = CRVUSD_TBTC_YB_POOL.exchange(
+            CRVUSD_INDEX_CRVUSD_TBTC_POOL,
+            TBTC_INDEX_CRVUSD_TBTC_POOL,
             _amountOut,
             0, // minAmount
-            false, // use_eth
             msg.sender // receiver
         );
 
@@ -127,23 +132,25 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _minAmount Minimum amount of borrow tokens to receive
     /// @return Amount of borrow tokens received
     function _swapTo(uint256 _amount, uint256 _minAmount) internal returns (uint256) {
-        // Pull WETH
-        WETH.safeTransferFrom(msg.sender, address(this), _amount);
+        // Pull tBTC
+        TBTC.safeTransferFrom(msg.sender, address(this), _amount);
 
-        // WETH --> USDC
-        uint256 _amountOut = TRICRYPTO.exchange(
-            WETH_INDEX_USDC_WETH_POOL,
-            USDC_INDEX_USDC_WETH_POOL,
+        // tBTC --> crvUSD
+        uint256 _amountOut = CRVUSD_TBTC_YB_POOL.exchange(
+            TBTC_INDEX_CRVUSD_TBTC_POOL,
+            CRVUSD_INDEX_CRVUSD_TBTC_POOL,
             _amount,
             0, // minAmount
-            false, // use_eth
             address(this) // receiver
         );
 
-        // USDC --> BOLD
-        _amountOut = BOLD_USDC_CURVE_POOL.exchange(
-            USDC_INDEX_BOLD_USDC_CURVE_POOL,
-            BOLD_INDEX_BOLD_USDC_CURVE_POOL,
+        // crvUSD --> scrvUSD
+        _amountOut = SCRVUSD.deposit(_amountOut, address(this));
+
+        // scrvUSD --> USDAf
+        _amountOut = SCRVUSD_USDAF_CURVE_POOL.exchange(
+            SCRVUSD_INDEX_SCRVUSD_USDAF_CURVE_POOL,
+            USDAF_INDEX_SCRVUSD_USDAF_CURVE_POOL,
             _amountOut,
             0, // minAmount
             msg.sender // receiver

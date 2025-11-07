@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {ETHToBOLDExchange as Exchange} from "../../periphery/Exchange.sol";
+import {tBTCToUSDafExchange as Exchange} from "../../periphery/Exchange.sol";
 import {
     LiquityV2LBStrategy as Strategy,
     LiquityMath,
@@ -12,8 +12,7 @@ import {
     AggregatorInterface,
     IAddressesRegistry,
     IBorrowerOperations,
-    IExchange,
-    IStrategy
+    IExchange
 } from "../../Strategy.sol";
 import {StrategyFactory} from "../../StrategyFactory.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
@@ -23,6 +22,9 @@ import {ITroveManager} from "../../interfaces/ITroveManager.sol";
 import {ICollateralRegistry} from "../interfaces/ICollateralRegistry.sol";
 import {ISortedTroves} from "../interfaces/ISortedTroves.sol";
 import {IHintHelpers} from "../interfaces/IHintHelpers.sol";
+
+import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
+import {IVault} from "@yearn-vaults/interfaces/IVault.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -44,17 +46,28 @@ interface IFactory {
 contract Setup is Test, IEvents {
 
     // Token addresses used in the tests.
-    IStrategyInterface public lenderVault = IStrategyInterface(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
+    IVault public lenderVault = IVault(0x89E93172AEF8261Db8437b90c3dCb61545a05317); // sUSDaf
 
-    // Liquity WETH
-    address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
-    address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526;
-    address public wrongAddressesRegistry = 0x8d733F7ea7c23Cbea7C613B6eBd845d46d3aAc54; // wstETH
-    address public borrowerOperations = 0x372ABD1810eAF23Cb9D941BbE7596DFb2c46BC65;
-    address public troveManager = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
-    address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
-    address public sortedTroves = 0xA25269E41BD072513849F2E64Ad221e84f3063F4;
-    uint256 public branchIndex = 0;
+    // // Liquity WETH
+    // address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
+    // address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526;
+    // address public wrongAddressesRegistry = 0x8d733F7ea7c23Cbea7C613B6eBd845d46d3aAc54; // wstETH
+    // address public borrowerOperations = 0x372ABD1810eAF23Cb9D941BbE7596DFb2c46BC65;
+    // address public troveManager = 0x7bcb64B2c9206a5B699eD43363f6F98D4776Cf5A;
+    // address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
+    // address public sortedTroves = 0xA25269E41BD072513849F2E64Ad221e84f3063F4;
+    // uint256 public branchIndex = 0;
+    // uint256 public liquidateCollateralFactor = 909090909090909090;
+
+    // Asymmetry tBTC
+    address public collateralRegistry = 0x33D68055Cd54061991B2e98b9ab326fFCE4d60Fe;
+    address public addressesRegistry = 0xbd9f75471990041A3e7C22872c814A273485E999;
+    address public wrongAddressesRegistry = 0x0ad1C302203F0fbB6Ca34641BDFeF0Bf4182377c; // sfrxUSD
+    address public borrowerOperations = 0xDA9af112eDfD837EebC1780433481426a52556e0;
+    address public troveManager = 0xfb17d0402ae557e3Efa549812b95e931B2B63bCE;
+    address public hintHelpers = 0x838a1F38c361Ffa1B23201640752149AdB4e865a;
+    address public sortedTroves = 0xD7a4d09680B8211940f19E1D1D25dc6568a4E0d0;
+    uint256 public branchIndex = 4;
     uint256 public liquidateCollateralFactor = 909090909090909090;
 
     // Contract instances that we will use repeatedly.
@@ -94,13 +107,13 @@ contract Setup is Test, IEvents {
     uint256 public constant MIN_DEBT = 2_000 * 1e18;
 
     function setUp() public virtual {
-        uint256 _blockNumber = 22_763_240; // Caching for faster tests
+        uint256 _blockNumber = 23_740_293; // Caching for faster tests
         vm.selectFork(vm.createFork(vm.envString("ETH_RPC_URL"), _blockNumber));
 
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["WETH"]);
+        asset = ERC20(tokenAddrs["tBTC"]);
 
         // Set decimals
         decimals = asset.decimals();
@@ -202,15 +215,23 @@ contract Setup is Test, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        tokenAddrs["tBTC"] = 0x18084fbA666a33d37592fA2633fD49a74DD93a88;
     }
 
     function simulateEarningInterest() public {
-        // Airdrop some profit to ysyBOLD
-        airdrop(ERC20(lenderVault.asset()), address(lenderVault), 100_000 ether);
+        // ysyBOLD strategy address on sUSDaf
+        IStrategy _ysyBOLDStrategy = IStrategy(0xad7D5D31Ffcb96f6F719Bb78209019d3d09e6baa);
 
-        // Report profit
+        // Airdrop some profit to ysyBOLD strategy
+        airdrop(ERC20(address(lenderVault.asset())), address(_ysyBOLDStrategy), 100_000 ether);
+
+        // Report profit on ysyBOLD strategy
+        vm.prank(0x604e586F17cE106B64185A7a0d2c1Da5bAce711E); // keeper
+        _ysyBOLDStrategy.report();
+
+        // Report profit on the vault
         vm.prank(0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7); // SMS
-        lenderVault.report();
+        lenderVault.process_report(address(_ysyBOLDStrategy));
 
         // Unlock profit
         skip(lenderVault.profitMaxUnlockTime());
@@ -227,7 +248,7 @@ contract Setup is Test, IEvents {
         bool _strategistDeposit
     ) public returns (uint256 _initialStrategistDeposit) {
         // Amount strategist deposits after deployment to open a trove
-        _initialStrategistDeposit = 2 ether;
+        _initialStrategistDeposit = 0.1 ether;
 
         // Deposit into strategy
         if (_strategistDeposit) mintAndDepositIntoStrategy(strategy, strategist, _initialStrategistDeposit);
@@ -294,13 +315,14 @@ contract Setup is Test, IEvents {
 
     function dropCollateralPrice() public {
         AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
-        int256 answer = oracle.latestAnswer();
+        (, int256 answer,,,) = oracle.latestRoundData();
+        // int256 answer = oracle.latestAnswer();
         int256 newAnswer = answer * 70 / 100; // 30% drop
-        vm.mockCall(
-            address(oracle),
-            abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector),
-            abi.encode(newAnswer) // 30% drop
-        );
+        // vm.mockCall(
+        //     address(oracle),
+        //     abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector),
+        //     abi.encode(newAnswer) // 30% drop
+        // );
 
         (uint80 roundId,, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
         vm.mockCall(
@@ -364,16 +386,18 @@ contract Setup is Test, IEvents {
         uint256 coll = borrowerOperations.getEntireBranchColl();
         uint256 debt = borrowerOperations.getEntireBranchDebt();
         AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
-        uint256 price = uint256(oracle.latestAnswer()) * 1e10;
+        // uint256 price = uint256(oracle.latestAnswer()) * 1e10;
+        (, int256 answer,,,) = oracle.latestRoundData();
+        uint256 price = uint256(answer) * 1e10;
 
         uint256 currentTCR = (coll * price) / debt;
         uint256 factor = (target * 1e18) / currentTCR;
 
-        int256 newAnswer = int256((uint256(oracle.latestAnswer()) * factor) / 1e18);
+        int256 newAnswer = int256(price * factor / 1e18);
 
-        vm.mockCall(
-            address(oracle), abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector), abi.encode(newAnswer)
-        );
+        // vm.mockCall(
+        //     address(oracle), abi.encodeWithSelector(AggregatorInterface.latestAnswer.selector), abi.encode(newAnswer)
+        // );
 
         (uint80 roundId,, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
         vm.mockCall(
