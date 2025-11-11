@@ -33,7 +33,7 @@ contract OperationTest is Setup {
         assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
         assertEq(strategy.TROVE_MANAGER(), troveManager);
         assertEq(strategy.EXCHANGE(), address(exchange));
-        assertEq(strategy.STAKED_LENDER_VAULT(), address(lenderVault));
+        assertEq(strategy.lenderVault(), address(lenderVault));
     }
 
     function test_invalidDeployment() public {

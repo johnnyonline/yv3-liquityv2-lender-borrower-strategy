@@ -25,7 +25,6 @@ interface IStrategyInterface is ILenderBorrower {
     function BORROWER_OPERATIONS() external view returns (address);
     function TROVE_MANAGER() external view returns (address);
     function EXCHANGE() external view returns (address);
-    function STAKED_LENDER_VAULT() external view returns (address);
 
     // ===============================================================
     // Privileged functions

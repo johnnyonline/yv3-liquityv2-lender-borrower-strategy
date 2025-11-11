@@ -58,7 +58,7 @@ contract StrategyAprOracle is AprOracleBase {
         IStrategy strategy_ = IStrategy(_strategy);
         uint256 _borrowApr =
             ITroveManager(strategy_.TROVE_MANAGER()).getLatestTroveData(strategy_.troveId()).annualInterestRate;
-        uint256 _rewardApr = VAULT_APR_ORACLE.getStrategyApr(strategy_.STAKED_LENDER_VAULT(), _delta);
+        uint256 _rewardApr = VAULT_APR_ORACLE.getStrategyApr(strategy_.lenderVault(), _delta);
         if (_borrowApr >= _rewardApr) return 0;
         uint256 _targetLTV = (strategy_.getLiquidateCollateralFactor() * strategy_.targetLTVMultiplier()) / MAX_BPS;
         return (_rewardApr - _borrowApr) * _targetLTV / WAD;
