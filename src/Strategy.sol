@@ -49,6 +49,12 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Maximum relative surplus required (in basis points) before tending is considered
     uint256 private constant _MAX_RELATIVE_SURPLUS = 1000; // 10%
 
+    /// @notice The branch minimum collateral ratio (MCR)
+    uint256 private immutable _MCR;
+
+    /// @notice The branch critical collateral ratio (CCR)
+    uint256 private immutable _CCR;
+
     /// @notice WETH token
     ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -103,6 +109,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             address(_priceFeed) == address(0) ? _addressesRegistry.priceFeed().ethUsdOracle().aggregator : _priceFeed;
         require(PRICE_FEED.decimals() == 8, "!priceFeed");
         EXCHANGE = _exchange;
+
+        _MCR = BORROWER_OPERATIONS.MCR();
+        _CCR = BORROWER_OPERATIONS.CCR();
 
         ERC20(address(lenderVault)).forceApprove(address(STAKED_LENDER_VAULT), type(uint256).max);
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
@@ -272,7 +281,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         uint256 _branchCollateral = BORROWER_OPERATIONS.getEntireBranchColl();
 
         // Collateral required to keep TCR >= CCR
-        uint256 _requiredColl = Math.ceilDiv(BORROWER_OPERATIONS.CCR() * _branchDebt, _price);
+        uint256 _requiredColl = Math.ceilDiv(_CCR * _branchDebt, _price);
 
         // Max collateral removable while staying >= CCR
         uint256 _headroomByCCR = _branchCollateral > _requiredColl ? _branchCollateral - _requiredColl : 0;
@@ -307,7 +316,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _isLiquidatable() internal view override returns (bool) {
         // `getCurrentICR()` expects the price to be in 1e18 format
         return
-            TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * _DECIMALS_DIFF) < BORROWER_OPERATIONS.MCR();
+            TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * _DECIMALS_DIFF) < _MCR;
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -336,7 +345,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
     /// @inheritdoc BaseLenderBorrower
     function getLiquidateCollateralFactor() public view override returns (uint256) {
-        return WAD * WAD / BORROWER_OPERATIONS.MCR();
+        return WAD * WAD / _MCR;
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -378,7 +387,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             BORROWER_OPERATIONS.getEntireBranchColl(),
             BORROWER_OPERATIONS.getEntireBranchDebt(),
             _getPrice(address(asset)) * _DECIMALS_DIFF // LiquityMath expects 1e18 format
-        ) < BORROWER_OPERATIONS.CCR();
+        ) < _CCR;
     }
 
     // ===============================================================
