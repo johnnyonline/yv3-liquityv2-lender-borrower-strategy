@@ -20,10 +20,23 @@ interface IBorrowerOperations {
         address _removeManager,
         address _receiver
     ) external returns (uint256);
-    function addColl(uint256 _troveId, uint256 _collAmount) external;
-    function withdrawColl(uint256 _troveId, uint256 _amount) external;
-    function repayBold(uint256 _troveId, uint256 _boldAmount) external;
-    function withdrawBold(uint256 _troveId, uint256 _amount, uint256 _maxFee) external;
+    function addColl(
+        uint256 _troveId,
+        uint256 _collAmount
+    ) external;
+    function withdrawColl(
+        uint256 _troveId,
+        uint256 _amount
+    ) external;
+    function repayBold(
+        uint256 _troveId,
+        uint256 _boldAmount
+    ) external;
+    function withdrawBold(
+        uint256 _troveId,
+        uint256 _amount,
+        uint256 _maxFee
+    ) external;
     function closeTrove(
         uint256 _troveId
     ) external;

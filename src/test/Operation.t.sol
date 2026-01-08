@@ -33,7 +33,6 @@ contract OperationTest is Setup {
         assertEq(strategy.BORROWER_OPERATIONS(), borrowerOperations);
         assertEq(strategy.TROVE_MANAGER(), troveManager);
         assertEq(strategy.EXCHANGE(), address(exchange));
-        assertEq(strategy.STAKED_LENDER_VAULT(), address(lenderVault));
     }
 
     function test_invalidDeployment() public {
@@ -639,9 +638,8 @@ contract OperationTest is Setup {
 
         // Get rid of some borrow token to simulate a loss
         vm.startPrank(address(strategy));
-        ERC20(strategy.borrowToken()).transfer(
-            address(6969), ERC20(strategy.borrowToken()).balanceOf(address(strategy)) * 90 / 100
-        );
+        ERC20(strategy.borrowToken())
+            .transfer(address(6969), ERC20(strategy.borrowToken()).balanceOf(address(strategy)) * 90 / 100);
         vm.stopPrank();
 
         // Sell the surplus

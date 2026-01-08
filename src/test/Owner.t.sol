@@ -59,7 +59,10 @@ contract OwnerTest is Setup {
         strategy.buyBorrowToken(0);
     }
 
-    function test_setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) public {
+    function test_setSurplusFloors(
+        uint256 _minSurplusAbsolute,
+        uint256 _minSurplusRelative
+    ) public {
         vm.assume(_minSurplusRelative <= MAX_BPS / 10);
         vm.prank(management);
         strategy.setSurplusFloors(_minSurplusAbsolute, _minSurplusRelative);

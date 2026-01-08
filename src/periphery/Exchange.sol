@@ -70,7 +70,11 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _minAmount Minimum amount of tokens to receive
     /// @param _fromBorrow If true, swap from borrow token to the collateral token, false otherwise
     /// @return Amount of tokens received
-    function swap(uint256 _amount, uint256 _minAmount, bool _fromBorrow) external override returns (uint256) {
+    function swap(
+        uint256 _amount,
+        uint256 _minAmount,
+        bool _fromBorrow
+    ) external override returns (uint256) {
         return _fromBorrow ? _swapFrom(_amount, _minAmount) : _swapTo(_amount, _minAmount);
     }
 
@@ -94,7 +98,10 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _amount Amount of borrow tokens to swap
     /// @param _minAmount Minimum amount of collateral tokens to receive
     /// @return Amount of collateral tokens received
-    function _swapFrom(uint256 _amount, uint256 _minAmount) internal returns (uint256) {
+    function _swapFrom(
+        uint256 _amount,
+        uint256 _minAmount
+    ) internal returns (uint256) {
         // Pull BOLD
         BOLD.safeTransferFrom(msg.sender, address(this), _amount);
 
@@ -126,7 +133,10 @@ contract ETHToBOLDExchange is IExchange {
     /// @param _amount Amount of collateral tokens to swap
     /// @param _minAmount Minimum amount of borrow tokens to receive
     /// @return Amount of borrow tokens received
-    function _swapTo(uint256 _amount, uint256 _minAmount) internal returns (uint256) {
+    function _swapTo(
+        uint256 _amount,
+        uint256 _minAmount
+    ) internal returns (uint256) {
         // Pull WETH
         WETH.safeTransferFrom(msg.sender, address(this), _amount);
 

@@ -145,7 +145,11 @@ contract Setup is Test, IEvents {
         return address(_strategy);
     }
 
-    function depositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function depositIntoStrategy(
+        IStrategyInterface _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -153,7 +157,11 @@ contract Setup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function mintAndDepositIntoStrategy(
+        IStrategyInterface _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
@@ -175,12 +183,19 @@ contract Setup is Test, IEvents {
         assertEq(_totalAssets, _totalDebt + _totalIdle, "!Added");
     }
 
-    function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
+    function airdrop(
+        ERC20 _asset,
+        address _to,
+        uint256 _amount
+    ) public {
         uint256 balanceBefore = _asset.balanceOf(_to);
         deal(address(_asset), _to, balanceBefore + _amount);
     }
 
-    function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
+    function setFees(
+        uint16 _protocolFee,
+        uint16 _performanceFee
+    ) public {
         address gov = IFactory(factory).governance();
 
         // Need to make sure there is a protocol fee recipient to set the fee.
@@ -255,12 +270,13 @@ contract Setup is Test, IEvents {
 
     function findHints() internal view returns (uint256 _upperHint, uint256 _lowerHint) {
         // Find approx hint (off-chain)
-        (uint256 _approxHint,,) = IHintHelpers(hintHelpers).getApproxHint({
-            _collIndex: branchIndex,
-            _interestRate: MIN_ANNUAL_INTEREST_RATE,
-            _numTrials: sqrt(100 * ITroveManager(troveManager).getTroveIdsCount()),
-            _inputRandomSeed: block.timestamp
-        });
+        (uint256 _approxHint,,) = IHintHelpers(hintHelpers)
+            .getApproxHint({
+                _collIndex: branchIndex,
+                _interestRate: MIN_ANNUAL_INTEREST_RATE,
+                _numTrials: sqrt(100 * ITroveManager(troveManager).getTroveIdsCount()),
+                _inputRandomSeed: block.timestamp
+            });
 
         // Find concrete insert position (off-chain)
         (_upperHint, _lowerHint) =
@@ -310,15 +326,19 @@ contract Setup is Test, IEvents {
         );
     }
 
-    function simulateCollateralRedemption(uint256 _amount, bool _zombie) internal {
+    function simulateCollateralRedemption(
+        uint256 _amount,
+        bool _zombie
+    ) internal {
         address _redeemer = address(420420);
         airdrop(ERC20(strategy.borrowToken()), _redeemer, _amount);
         vm.prank(_redeemer);
-        ICollateralRegistry(collateralRegistry).redeemCollateral(
-            _amount,
-            0, // max iterations
-            1_000_000_000_000_000_000 // max fee percentage
-        );
+        ICollateralRegistry(collateralRegistry)
+            .redeemCollateral(
+                _amount,
+                0, // max iterations
+                1_000_000_000_000_000_000 // max fee percentage
+            );
         if (_zombie) {
             require(
                 uint8(ITroveManager(troveManager).getTroveStatus(strategy.troveId()))
@@ -357,12 +377,12 @@ contract Setup is Test, IEvents {
     }
 
     function setTCRJustAboveCCR() internal {
-        IBorrowerOperations borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
-        uint256 ccr = borrowerOperations.CCR();
+        IBorrowerOperations _borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
+        uint256 ccr = _borrowerOperations.CCR();
         uint256 target = (ccr * 1001) / 1000; // CCR + 0.1%
 
-        uint256 coll = borrowerOperations.getEntireBranchColl();
-        uint256 debt = borrowerOperations.getEntireBranchDebt();
+        uint256 coll = _borrowerOperations.getEntireBranchColl();
+        uint256 debt = _borrowerOperations.getEntireBranchDebt();
         AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         uint256 price = uint256(oracle.latestAnswer()) * 1e10;
 
@@ -384,11 +404,11 @@ contract Setup is Test, IEvents {
     }
 
     function calcTCR() internal view returns (uint256) {
-        IBorrowerOperations borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
+        IBorrowerOperations _borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
         AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         uint256 price = uint256(oracle.latestAnswer()) * 1e10;
         return LiquityMath._computeCR(
-            borrowerOperations.getEntireBranchColl(), borrowerOperations.getEntireBranchDebt(), price
+            _borrowerOperations.getEntireBranchColl(), _borrowerOperations.getEntireBranchDebt(), price
         );
     }
 

@@ -58,9 +58,6 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice WETH token
     ERC20 private constant _WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    /// @notice The staked lender vault contract
-    IStrategy public constant STAKED_LENDER_VAULT = IStrategy(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
-
     /// @notice Same Chainlink price feed as used by the Liquity branch
     AggregatorInterface public immutable PRICE_FEED;
 
@@ -94,7 +91,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
             _addressesRegistry.collToken(), // asset
             _name,
             _addressesRegistry.boldToken(), // borrowToken
-            STAKED_LENDER_VAULT.asset() // lenderVault
+            address(LenderOps.LENDER_VAULT) // lenderVault
         )
     {
         require(_exchange.BORROW() == borrowToken && _exchange.COLLATERAL() == address(asset), "!exchange");
@@ -113,7 +110,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         _MCR = BORROWER_OPERATIONS.MCR();
         _CCR = BORROWER_OPERATIONS.CCR();
 
-        ERC20(address(lenderVault)).forceApprove(address(STAKED_LENDER_VAULT), type(uint256).max);
+        ERC20(address(lenderVault)).forceApprove(address(LenderOps.STAKED_LENDER_VAULT), type(uint256).max);
         ERC20(borrowToken).forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(EXCHANGE), type(uint256).max);
         asset.forceApprove(address(BORROWER_OPERATIONS), type(uint256).max);
@@ -131,7 +128,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @dev Should be called through a private RPC to avoid fee slippage
     /// @param _upperHint Upper hint
     /// @param _lowerHint Lower hint
-    function openTrove(uint256 _upperHint, uint256 _lowerHint) external onlyEmergencyAuthorized {
+    function openTrove(
+        uint256 _upperHint,
+        uint256 _lowerHint
+    ) external onlyEmergencyAuthorized {
         require(troveId == 0, "troveId");
 
         // Mint `MIN_DEBT` and use all the collateral we have
@@ -172,7 +172,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @dev Should be called through a private RPC to avoid fee slippage
     /// @param _upperHint Upper hint
     /// @param _lowerHint Lower hint
-    function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external onlyEmergencyAuthorized {
+    function adjustZombieTrove(
+        uint256 _upperHint,
+        uint256 _lowerHint
+    ) external onlyEmergencyAuthorized {
         // Mint just enough to get the trove out of zombie mode, using all the collateral we have
         TroveOps.adjustZombieTrove(
             BORROWER_OPERATIONS, troveId, balanceOfAsset(), balanceOfDebt(), _upperHint, _lowerHint
@@ -185,7 +188,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @notice Set the surplus detection floors used by `hasBorrowTokenSurplus()`
     /// @param _minSurplusAbsolute Absolute minimum surplus required, in borrow token units
     /// @param _minSurplusRelative Relative minimum surplus required, as basis points of current debt
-    function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external onlyManagement {
+    function setSurplusFloors(
+        uint256 _minSurplusAbsolute,
+        uint256 _minSurplusRelative
+    ) external onlyManagement {
         require(_minSurplusRelative <= _MAX_RELATIVE_SURPLUS, "!relativeSurplus");
         minSurplusAbsolute = _minSurplusAbsolute;
         minSurplusRelative = _minSurplusRelative;
@@ -199,7 +205,10 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     ///      existing depositors. To prevent this griefing vector, deposits are gated
     /// @param _address Address to allow or disallow
     /// @param _allowed True to allow deposits from `_address`, false to block
-    function setAllowed(address _address, bool _allowed) external onlyManagement {
+    function setAllowed(
+        address _address,
+        bool _allowed
+    ) external onlyManagement {
         allowed[_address] = _allowed;
     }
 
@@ -315,8 +324,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     /// @inheritdoc BaseLenderBorrower
     function _isLiquidatable() internal view override returns (bool) {
         // `getCurrentICR()` expects the price to be in 1e18 format
-        return
-            TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * _DECIMALS_DIFF) < _MCR;
+        return TROVE_MANAGER.getCurrentICR(troveId, _getPrice(address(asset)) * _DECIMALS_DIFF) < _MCR;
     }
 
     /// @inheritdoc BaseLenderBorrower
@@ -398,29 +406,29 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _lendBorrowToken(
         uint256 _amount
     ) internal override {
-        LenderOps.lend(STAKED_LENDER_VAULT, lenderVault, _amount);
+        LenderOps.lend(_amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _withdrawBorrowToken(
         uint256 _amount
     ) internal override {
-        LenderOps.withdraw(STAKED_LENDER_VAULT, lenderVault, _amount);
+        LenderOps.withdraw(_amount);
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _lenderMaxDeposit() internal view override returns (uint256) {
-        return LenderOps.maxDeposit(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.maxDeposit();
     }
 
     /// @inheritdoc BaseLenderBorrower
     function _lenderMaxWithdraw() internal view override returns (uint256) {
-        return LenderOps.maxWithdraw(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.maxWithdraw();
     }
 
     /// @inheritdoc BaseLenderBorrower
     function balanceOfLentAssets() public view override returns (uint256) {
-        return LenderOps.balanceOfAssets(STAKED_LENDER_VAULT, lenderVault);
+        return LenderOps.balanceOfAssets();
     }
 
     // ===============================================================

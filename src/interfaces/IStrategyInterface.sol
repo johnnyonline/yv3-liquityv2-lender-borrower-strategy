@@ -25,20 +25,35 @@ interface IStrategyInterface is ILenderBorrower {
     function BORROWER_OPERATIONS() external view returns (address);
     function TROVE_MANAGER() external view returns (address);
     function EXCHANGE() external view returns (address);
-    function STAKED_LENDER_VAULT() external view returns (address);
 
     // ===============================================================
     // Privileged functions
     // ===============================================================
 
-    function openTrove(uint256 _upperHint, uint256 _lowerHint) external;
-    function adjustTroveInterestRate(uint256 _newAnnualInterestRate, uint256 _upperHint, uint256 _lowerHint) external;
+    function openTrove(
+        uint256 _upperHint,
+        uint256 _lowerHint
+    ) external;
+    function adjustTroveInterestRate(
+        uint256 _newAnnualInterestRate,
+        uint256 _upperHint,
+        uint256 _lowerHint
+    ) external;
     function buyBorrowToken(
         uint256 _amount
     ) external;
-    function adjustZombieTrove(uint256 _upperHint, uint256 _lowerHint) external;
-    function setSurplusFloors(uint256 _minSurplusAbsolute, uint256 _minSurplusRelative) external;
-    function setAllowed(address _address, bool _allowed) external;
+    function adjustZombieTrove(
+        uint256 _upperHint,
+        uint256 _lowerHint
+    ) external;
+    function setSurplusFloors(
+        uint256 _minSurplusAbsolute,
+        uint256 _minSurplusRelative
+    ) external;
+    function setAllowed(
+        address _address,
+        bool _allowed
+    ) external;
     function sweep(
         address _token
     ) external;

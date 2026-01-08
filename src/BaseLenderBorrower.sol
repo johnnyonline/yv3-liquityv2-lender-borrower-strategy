@@ -94,7 +94,10 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @param _warningLTVMultiplier New warning LTV multiplier
      * @dev Target must be less than warning, warning must be <= 9000, target cannot be 0
      */
-    function setLtvMultipliers(uint16 _targetLTVMultiplier, uint16 _warningLTVMultiplier) external onlyManagement {
+    function setLtvMultipliers(
+        uint16 _targetLTVMultiplier,
+        uint16 _warningLTVMultiplier
+    ) external onlyManagement {
         require(
             _warningLTVMultiplier <= 9_000 && _targetLTVMultiplier < _warningLTVMultiplier && _targetLTVMultiplier != 0,
             "invalid LTV"
@@ -823,7 +826,10 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @param _token The token address
      * @return The USD value scaled by 1e8
      */
-    function _toUsd(uint256 _amount, address _token) internal view virtual returns (uint256) {
+    function _toUsd(
+        uint256 _amount,
+        address _token
+    ) internal view virtual returns (uint256) {
         if (_amount == 0) return 0;
         unchecked {
             return (_amount * _getPrice(_token)) / (10 ** ERC20(_token).decimals());
@@ -837,7 +843,10 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @param _token The token address
      * @return The token amount
      */
-    function _fromUsd(uint256 _amount, address _token) internal view virtual returns (uint256) {
+    function _fromUsd(
+        uint256 _amount,
+        address _token
+    ) internal view virtual returns (uint256) {
         if (_amount == 0) return 0;
         unchecked {
             return (_amount * (10 ** ERC20(_token).decimals())) / _getPrice(_token);
@@ -879,7 +888,11 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
      * @param _to Output token
      * @return Estimated output amount
      */
-    function _getAmountOut(uint256 _amount, address _from, address _to) internal view virtual returns (uint256) {
+    function _getAmountOut(
+        uint256 _amount,
+        address _from,
+        address _to
+    ) internal view virtual returns (uint256) {
         if (_amount == 0) return 0;
 
         return (_fromUsd(_toUsd(_amount, _from), _to) * (MAX_BPS - slippage)) / MAX_BPS;
@@ -946,7 +959,10 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
     }
 
     /// @notice Withdraw a specific amount of `_token`
-    function manualWithdraw(address _token, uint256 _amount) external virtual onlyEmergencyAuthorized {
+    function manualWithdraw(
+        address _token,
+        uint256 _amount
+    ) external virtual onlyEmergencyAuthorized {
         if (_token == borrowToken) _withdrawBorrowToken(_amount);
         else _withdrawCollateral(_amount);
     }

@@ -3,6 +3,8 @@ pragma solidity 0.8.24;
 
 import {AprOracleBase} from "@periphery/AprOracle/AprOracleBase.sol";
 
+import {LenderOps} from "../libraries/LenderOps.sol";
+
 import {ITroveManager} from "../interfaces/ITroveManager.sol";
 import {IVaultAPROracle} from "../interfaces/IVaultAPROracle.sol";
 import {IStrategyInterface as IStrategy} from "../interfaces/IStrategyInterface.sol";
@@ -54,11 +56,14 @@ contract StrategyAprOracle is AprOracleBase {
      * @param _delta The difference in debt.
      * @return . The expected apr for the strategy represented as 1e18.
      */
-    function aprAfterDebtChange(address _strategy, int256 _delta) external view override returns (uint256) {
+    function aprAfterDebtChange(
+        address _strategy,
+        int256 _delta
+    ) external view override returns (uint256) {
         IStrategy strategy_ = IStrategy(_strategy);
         uint256 _borrowApr =
             ITroveManager(strategy_.TROVE_MANAGER()).getLatestTroveData(strategy_.troveId()).annualInterestRate;
-        uint256 _rewardApr = VAULT_APR_ORACLE.getStrategyApr(strategy_.STAKED_LENDER_VAULT(), _delta);
+        uint256 _rewardApr = VAULT_APR_ORACLE.getStrategyApr(address(LenderOps.STAKED_LENDER_VAULT), _delta);
         if (_borrowApr >= _rewardApr) return 0;
         uint256 _targetLTV = (strategy_.getLiquidateCollateralFactor() * strategy_.targetLTVMultiplier()) / MAX_BPS;
         return (_rewardApr - _borrowApr) * _targetLTV / WAD;

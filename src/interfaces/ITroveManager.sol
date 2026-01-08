@@ -24,7 +24,10 @@ interface ITroveManager {
         uint256 lastInterestRateAdjTime;
     }
 
-    function getCurrentICR(uint256 _troveId, uint256 _price) external view returns (uint256);
+    function getCurrentICR(
+        uint256 _troveId,
+        uint256 _price
+    ) external view returns (uint256);
     function getLatestTroveData(
         uint256 _troveId
     ) external view returns (LatestTroveData memory trove);

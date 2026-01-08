@@ -23,7 +23,12 @@ contract StrategyFactory {
     /// @notice Track the deployments. asset => pool => strategy
     mapping(address => address) public deployments;
 
-    constructor(address _management, address _performanceFeeRecipient, address _keeper, address _emergencyAdmin) {
+    constructor(
+        address _management,
+        address _performanceFeeRecipient,
+        address _keeper,
+        address _emergencyAdmin
+    ) {
         management = _management;
         performanceFeeRecipient = _performanceFeeRecipient;
         keeper = _keeper;
@@ -62,7 +67,11 @@ contract StrategyFactory {
         return address(_newStrategy);
     }
 
-    function setAddresses(address _management, address _performanceFeeRecipient, address _keeper) external {
+    function setAddresses(
+        address _management,
+        address _performanceFeeRecipient,
+        address _keeper
+    ) external {
         require(msg.sender == management, "!management");
         management = _management;
         performanceFeeRecipient = _performanceFeeRecipient;
