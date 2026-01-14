@@ -72,7 +72,7 @@ abstract contract BaseLenderBorrower is BaseHealthCheck {
         if (_lenderVault != address(0)) {
             lenderVault = IERC4626(_lenderVault);
             require(lenderVault.asset() == _borrowToken, "!lenderVault");
-            ERC20(_borrowToken).safeApprove(_lenderVault, type(uint256).max);
+            ERC20(_borrowToken).forceApprove(_lenderVault, type(uint256).max);
         }
     }
 
