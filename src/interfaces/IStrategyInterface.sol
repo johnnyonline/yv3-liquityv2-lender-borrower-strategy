@@ -12,6 +12,7 @@ interface IStrategyInterface is ILenderBorrower {
     function troveId() external view returns (uint256);
     function minSurplusAbsolute() external view returns (uint256);
     function minSurplusRelative() external view returns (uint256);
+    function allowedSwapSlippageBps() external view returns (uint256);
     function allowed(
         address _address
     ) external view returns (bool);
@@ -49,6 +50,9 @@ interface IStrategyInterface is ILenderBorrower {
     function setSurplusFloors(
         uint256 _minSurplusAbsolute,
         uint256 _minSurplusRelative
+    ) external;
+    function setAllowedSwapSlippageBps(
+        uint256 _allowedSwapSlippageBps
     ) external;
     function setAllowed(
         address _address,

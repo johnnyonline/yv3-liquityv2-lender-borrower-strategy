@@ -89,6 +89,34 @@ contract OwnerTest is Setup {
         strategy.setSurplusFloors(_minSurplusAbsolute, _minSurplusRelative);
     }
 
+    function test_setAllowedSwapSlippageBps(
+        uint256 _allowedSwapSlippageBps
+    ) public {
+        vm.assume(_allowedSwapSlippageBps <= MAX_BPS);
+        vm.prank(management);
+        strategy.setAllowedSwapSlippageBps(_allowedSwapSlippageBps);
+        assertEq(strategy.allowedSwapSlippageBps(), _allowedSwapSlippageBps);
+    }
+
+    function test_setAllowedSwapSlippageBps_wrongCaller(
+        address _wrongCaller,
+        uint256 _allowedSwapSlippageBps
+    ) public {
+        vm.assume(_wrongCaller != management);
+        vm.expectRevert("!management");
+        vm.prank(_wrongCaller);
+        strategy.setAllowedSwapSlippageBps(_allowedSwapSlippageBps);
+    }
+
+    function _setAllowedSlippageBps_tooHigh(
+        uint256 _allowedSwapSlippageBps
+    ) public {
+        vm.assume(_allowedSwapSlippageBps > MAX_BPS);
+        vm.prank(management);
+        vm.expectRevert("!allowedSwapSlippageBps");
+        strategy.setAllowedSwapSlippageBps(_allowedSwapSlippageBps);
+    }
+
     function test_setAllowed(
         address _newAllowed
     ) public {

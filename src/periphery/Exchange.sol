@@ -114,7 +114,7 @@ contract ETHToBOLDExchange is IExchange {
             address(this) // receiver
         );
 
-        // USDC --> ETH
+        // USDC --> WETH
         _amountOut = TRICRYPTO.exchange(
             USDC_INDEX_USDC_WETH_POOL,
             WETH_INDEX_USDC_WETH_POOL,

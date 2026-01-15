@@ -31,10 +31,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     uint256 public troveId;
 
     /// @notice Absolute surplus required (in BOLD) before tending is considered
+    /// @dev Initialized to `50` in the constructor
     uint256 public minSurplusAbsolute;
 
     /// @notice Relative surplus required (in basis points) of current debt, before tending is considered
+    /// @dev Initialized to `100` (1%) in the constructor
     uint256 public minSurplusRelative;
+
+    /// @notice Allowed slippage (in basis points) when swapping tokens
+    /// @dev Initialized to `9_500` (5%) in the constructor
+    uint256 public allowedSwapSlippageBps;
 
     /// @notice Addresses allowed to deposit
     mapping(address => bool) public allowed;
@@ -42,6 +48,9 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     // ===============================================================
     // Constants
     // ===============================================================
+
+    /// @notice Precision used by the price feed
+    uint256 private constant _PRICE_PRECISION = 1e8;
 
     /// @notice The difference in decimals between our price oracle (1e8) and Liquity's price oracle (1e18)
     uint256 private constant _DECIMALS_DIFF = 1e10;
@@ -98,6 +107,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
 
         minSurplusAbsolute = 50e18; // 50 BOLD
         minSurplusRelative = 100; // 1%
+        allowedSwapSlippageBps = 9500; // 5%
 
         BORROWER_OPERATIONS = _addressesRegistry.borrowerOperations();
         TROVE_MANAGER = _addressesRegistry.troveManager();
@@ -195,6 +205,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         require(_minSurplusRelative <= _MAX_RELATIVE_SURPLUS, "!relativeSurplus");
         minSurplusAbsolute = _minSurplusAbsolute;
         minSurplusRelative = _minSurplusRelative;
+    }
+
+    /// @notice Set the allowed swap slippage (in basis points)
+    /// @dev E.g., 9_500 = 5% slippage allowed
+    /// @param _allowedSwapSlippageBps The allowed swap slippage
+    function setAllowedSwapSlippageBps(
+        uint256 _allowedSwapSlippageBps
+    ) external onlyManagement {
+        require(_allowedSwapSlippageBps <= MAX_BPS, "!allowedSwapSlippageBps");
+        allowedSwapSlippageBps = _allowedSwapSlippageBps;
     }
 
     /// @notice Allow (or disallow) a specific address to deposit
@@ -487,9 +507,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _sellBorrowToken(
         uint256 _amount
     ) internal override {
+        // Calculate the expected amount of collateral out
+        uint256 _expectedAmountOut = _amount * _PRICE_PRECISION / _getPrice(address(asset));
+
+        // Apply slippage tolerance
+        uint256 _minAmountOut = _expectedAmountOut * allowedSwapSlippageBps / MAX_BPS;
+
+        // Swap away
         EXCHANGE.swap(
             _amount,
-            0, // minAmount
+            _minAmountOut, // minAmount
             true // fromBorrow
         );
     }
@@ -506,9 +533,16 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     function _buyBorrowToken(
         uint256 _amount
     ) internal {
+        // Calculate the expected amount of borrow token out
+        uint256 _expectedAmountOut = _amount * _getPrice(address(asset)) / _PRICE_PRECISION;
+
+        // Apply slippage tolerance
+        uint256 _minAmountOut = _expectedAmountOut * allowedSwapSlippageBps / MAX_BPS;
+
+        // Swap away
         EXCHANGE.swap(
             _amount,
-            0, // minAmount
+            _minAmountOut, // minAmount
             false // fromBorrow
         );
     }

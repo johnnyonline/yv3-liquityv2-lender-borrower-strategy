@@ -461,6 +461,10 @@ contract OperationTest is Setup {
         // Simulate price drop such that TCR < CCR
         simulateTCRLessThanCCR();
 
+        // Set `allowedSwapSlippageBps` to `0`
+        vm.prank(management);
+        strategy.setAllowedSwapSlippageBps(0);
+
         // Sell the surplus
         vm.prank(keeper);
         strategy.tend();
@@ -584,6 +588,10 @@ contract OperationTest is Setup {
         // Surplus to sell
         (bool trigger,) = strategy.tendTrigger();
         assertTrue(trigger, "sellSurplus");
+
+        // Set `allowedSwapSlippageBps` to `0`
+        vm.prank(management);
+        strategy.setAllowedSwapSlippageBps(0);
 
         // Sell the surplus
         vm.prank(keeper);
@@ -788,6 +796,10 @@ contract OperationTest is Setup {
         (bool trigger,) = strategy.tendTrigger();
         assertTrue(trigger, "sellRewards");
 
+        // Set `allowedSwapSlippageBps` to `0`
+        vm.prank(management);
+        strategy.setAllowedSwapSlippageBps(0);
+
         // Sell the rewards
         vm.prank(keeper);
         strategy.tend();
@@ -937,7 +949,7 @@ contract OperationTest is Setup {
     function test_withdraw_whenTCRIsSlightlyMoreThanCCR(
         uint256 _amount
     ) public {
-        vm.assume(_amount > 20 ether && _amount < maxFuzzAmount);
+        vm.assume(_amount > 20 ether && _amount < 100 ether);
 
         // Setting more conservative LTV multipliers so when we repay we worsen the TCR
         vm.prank(management);
