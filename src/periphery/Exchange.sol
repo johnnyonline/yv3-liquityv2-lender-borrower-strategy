@@ -25,8 +25,8 @@ contract ETHToBOLDExchange is IExchange {
         ICurveStableSwapNG(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
 
     /// @notice WETH/USDC Curve Pool
-    uint256 private constant USDC_INDEX_USDC_WETH_POOL = 0;
-    uint256 private constant WETH_INDEX_USDC_WETH_POOL = 2;
+    uint256 private constant USDC_INDEX_TRICRYPTO = 0;
+    uint256 private constant WETH_INDEX_TRICRYPTO = 2;
     ICurveTricrypto private constant TRICRYPTO = ICurveTricrypto(0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B);
 
     /// @notice Token addresses
@@ -116,8 +116,8 @@ contract ETHToBOLDExchange is IExchange {
 
         // USDC --> WETH
         _amountOut = TRICRYPTO.exchange(
-            USDC_INDEX_USDC_WETH_POOL,
-            WETH_INDEX_USDC_WETH_POOL,
+            USDC_INDEX_TRICRYPTO,
+            WETH_INDEX_TRICRYPTO,
             _amountOut,
             0, // minAmount
             false, // use_eth
@@ -142,8 +142,8 @@ contract ETHToBOLDExchange is IExchange {
 
         // WETH --> USDC
         uint256 _amountOut = TRICRYPTO.exchange(
-            WETH_INDEX_USDC_WETH_POOL,
-            USDC_INDEX_USDC_WETH_POOL,
+            WETH_INDEX_TRICRYPTO,
+            USDC_INDEX_TRICRYPTO,
             _amount,
             0, // minAmount
             false, // use_eth
