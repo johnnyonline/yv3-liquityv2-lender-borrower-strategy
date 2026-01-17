@@ -493,7 +493,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         uint256 _loose = balanceOfBorrowToken();
         uint256 _have = balanceOfLentAssets() + _loose;
         uint256 _owe = balanceOfDebt();
-        if (_owe >= _have) return;
+        if (_have <= _owe) return;
 
         uint256 _toSell = _have - _owe;
         if (_toSell > _loose) _withdrawBorrowToken(_toSell - _loose);
