@@ -328,8 +328,8 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @inheritdoc BaseLenderBorrower
-    function _isSupplyPaused() internal pure override returns (bool) {
-        return false;
+    function _isSupplyPaused() internal view override returns (bool) {
+        return BORROWER_OPERATIONS.hasBeenShutDown();
     }
 
     /// @inheritdoc BaseLenderBorrower
