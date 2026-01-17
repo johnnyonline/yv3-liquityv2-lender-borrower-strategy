@@ -338,7 +338,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         // in that case we should not attempt to borrow.
         // When TCR >= CCR, our own target (<= 90% of MCR) is stricter than the CCR requirement,
         // so don’t need to impose an additional cap in `_maxBorrowAmount()`
-        return _isTCRBelowCCR();
+        return _isTCRBelowCCR() || BORROWER_OPERATIONS.hasBeenShutDown();
     }
 
     /// @inheritdoc BaseLenderBorrower
