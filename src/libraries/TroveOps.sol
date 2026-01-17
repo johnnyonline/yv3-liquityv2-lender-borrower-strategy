@@ -121,7 +121,7 @@ library TroveOps {
     /// @dev `_management` will get back the ETH gas compensation if we're closing the trove
     /// @param _troveManager The trove manager contract
     /// @param _borrowerOperations The borrower operations contract
-    /// @param _borrowerOperations The collateral surplus pool contract
+    /// @param _collSurplusPool The collateral surplus pool contract
     /// @param _management The management address
     /// @param _troveId The ID of the trove
     function onEmergencyWithdraw(
