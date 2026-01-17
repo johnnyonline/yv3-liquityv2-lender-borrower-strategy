@@ -217,7 +217,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         allowedSwapSlippageBps = _allowedSwapSlippageBps;
     }
 
-    /// @notice Allow (or disallow) a specific address to deposit
+    /// @notice Allow (or disallow) a specific address to deposit into the strategy
     /// @dev Deposits can trigger new borrows, and Liquity charges an upfront fee on
     ///      every debt increase. If deposits were permissionless, a malicious actor
     ///      could repeatedly deposit/withdraw small amounts to force the strategy
