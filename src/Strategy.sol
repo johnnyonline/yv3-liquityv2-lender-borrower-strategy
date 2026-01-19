@@ -167,6 +167,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @notice Manually buy borrow token
+    /// @dev Should be called through a private RPC to avoid getting sandwiched
     /// @dev Potentially can never reach `_buyBorrowToken()` in `_liquidatePosition()`
     ///      because of lender vault accounting (i.e. `balanceOfLentAssets() == 0` is never true)
     function buyBorrowToken(
