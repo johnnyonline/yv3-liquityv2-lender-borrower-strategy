@@ -461,7 +461,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
         // tend to (1) minimize exchange rate exposure and (2) minimize the risk of someone using our borrowing capacity
         // before we manage to borrow again, such that any new debt we take will lead to TCR < CCR
         //
-        // (2) chain of events: [1] we are redeemed [2] we have no debt but some collateral
+        // chain of events for step (2) from above: [1] we are redeemed [2] we have no debt but some collateral
         // [3] someone hops in and uses our collateral to borrow above CCR [4] we cannot take new debt because it will lead to TCR < CCR
         if (_isBaseFeeAcceptable() && hasBorrowTokenSurplus()) return true;
 
