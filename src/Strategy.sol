@@ -529,7 +529,7 @@ contract LiquityV2LBStrategy is BaseLenderBorrower {
     }
 
     /// @notice Buy borrow token
-    /// @param _amount The amount of asset to sale
+    /// @param _amount The amount of asset to sell
     function _buyBorrowToken(
         uint256 _amount
     ) internal {
