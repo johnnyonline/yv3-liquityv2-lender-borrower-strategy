@@ -4,7 +4,11 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {ETHToBOLDExchange as Exchange} from "../../periphery/Exchange.sol";
+// import {RETHPriceFeed as PriceFeed} from "../../periphery/RETHPriceFeed.sol";
+import {WSTETHPriceFeed as PriceFeed} from "../../periphery/WSTETHPriceFeed.sol";
+import {WETHToBOLDExchange as Exchange} from "../../periphery/WETHToBOLDExchange.sol";
+// import {RETHToBOLDExchange as Exchange} from "../../periphery/RETHToBOLDExchange.sol";
+// import {WSTETHToBOLDExchange as Exchange} from "../../periphery/WSTETHToBOLDExchange.sol";
 import {
     LiquityV2LBStrategy as Strategy,
     LiquityMath,
@@ -46,6 +50,8 @@ contract Setup is Test, IEvents {
     // Token addresses used in the tests.
     IStrategyInterface public lenderVault = IStrategyInterface(0x23346B04a7f55b8760E5860AA5A77383D63491cD); // ysyBOLD
 
+    AggregatorInterface public oracle = AggregatorInterface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419); // ETH/USD Chainlink oracle
+
     // Liquity WETH
     address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
     address public addressesRegistry = 0x20F7C9ad66983F6523a0881d0f82406541417526;
@@ -56,6 +62,28 @@ contract Setup is Test, IEvents {
     address public sortedTroves = 0xA25269E41BD072513849F2E64Ad221e84f3063F4;
     uint256 public branchIndex = 0;
     uint256 public liquidateCollateralFactor = 909090909090909090;
+
+    // // Liquity wstETH
+    // address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
+    // address public addressesRegistry = 0x8d733F7ea7c23Cbea7C613B6eBd845d46d3aAc54;
+    // address public wrongAddressesRegistry = 0x6106046F031a22713697e04C08B330dDaf3e8789; // rETH
+    // address public borrowerOperations = 0xa741A32f9dcFe6aDBa088fD0f97e90742d7d5DA3;
+    // address public troveManager = 0xA2895d6A3bf110561Dfe4b71cA539d84e1928B22;
+    // address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
+    // address public sortedTroves = 0x84eb85a8C25049255614F0536Bea8F31682e86F1;
+    // uint256 public branchIndex = 1;
+    // uint256 public liquidateCollateralFactor = 909090909090909090;
+
+    // // Liquity rETH
+    // address public collateralRegistry = 0xf949982B91C8c61e952B3bA942cbbfaef5386684;
+    // address public addressesRegistry = 0x6106046F031a22713697e04C08B330dDaf3e8789;
+    // address public wrongAddressesRegistry = 0x8d733F7ea7c23Cbea7C613B6eBd845d46d3aAc54; // wstETH
+    // address public borrowerOperations = 0xe8119fC02953B27a1b48D2573855738485A17329;
+    // address public troveManager = 0xb2B2ABEb5C357a234363FF5D180912D319e3e19e;
+    // address public hintHelpers = 0xF0caE19C96E572234398d6665cC1147A16cBe657;
+    // address public sortedTroves = 0x14d8d8011dF2b396Ed2bbC4959bb73250324F386;
+    // uint256 public branchIndex = 2;
+    // uint256 public liquidateCollateralFactor = 909090909090909090;
 
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
@@ -94,13 +122,15 @@ contract Setup is Test, IEvents {
     uint256 public constant MIN_DEBT = 2_000 * 1e18;
 
     function setUp() public virtual {
-        uint256 _blockNumber = 22_763_240; // Caching for faster tests
+        uint256 _blockNumber = 24_298_873; // Caching for faster tests
         vm.selectFork(vm.createFork(vm.envString("ETH_RPC_URL"), _blockNumber));
 
         _setTokenAddrs();
 
         // Set asset
         asset = ERC20(tokenAddrs["WETH"]);
+        // asset = ERC20(tokenAddrs["wstETH"]);
+        // asset = ERC20(tokenAddrs["rETH"]);
 
         // Set decimals
         decimals = asset.decimals();
@@ -124,14 +154,14 @@ contract Setup is Test, IEvents {
     function setUpStrategy() public returns (address) {
         exchange = new Exchange();
 
+        AggregatorInterface priceFeed;
+        if (address(asset) != tokenAddrs["WETH"]) priceFeed = AggregatorInterface(address(new PriceFeed()));
+
         // we save the strategy as a IStrategyInterface to give it the needed interface
         IStrategyInterface _strategy = IStrategyInterface(
             address(
                 strategyFactory.newStrategy(
-                    IAddressesRegistry(addressesRegistry),
-                    AggregatorInterface(address(0)),
-                    IExchange(address(exchange)),
-                    "Tokenized Strategy"
+                    IAddressesRegistry(addressesRegistry), priceFeed, IExchange(address(exchange)), "Tokenized Strategy"
                 )
             )
         );
@@ -217,6 +247,8 @@ contract Setup is Test, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        tokenAddrs["rETH"] = 0xae78736Cd615f374D3085123A210448E74Fc6393;
+        tokenAddrs["wstETH"] = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
     }
 
     function simulateEarningInterest() public {
@@ -299,17 +331,23 @@ contract Setup is Test, IEvents {
     }
 
     function updateOracles() public {
-        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
-        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData();
+        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) = oracle.latestRoundData(); // ETH/USD
         vm.mockCall(
             address(oracle),
+            abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
+            abi.encode(roundId, answer, startedAt, block.timestamp, answeredInRound)
+        );
+
+        AggregatorInterface anotherOracle = AggregatorInterface(0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8); // stETH/USD
+        (roundId, answer, startedAt,, answeredInRound) = anotherOracle.latestRoundData();
+        vm.mockCall(
+            address(anotherOracle),
             abi.encodeWithSelector(AggregatorInterface.latestRoundData.selector),
             abi.encode(roundId, answer, startedAt, block.timestamp, answeredInRound)
         );
     }
 
     function dropCollateralPrice() public {
-        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         int256 answer = oracle.latestAnswer();
         int256 newAnswer = answer * 70 / 100; // 30% drop
         vm.mockCall(
@@ -383,7 +421,6 @@ contract Setup is Test, IEvents {
 
         uint256 coll = _borrowerOperations.getEntireBranchColl();
         uint256 debt = _borrowerOperations.getEntireBranchDebt();
-        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         uint256 price = uint256(oracle.latestAnswer()) * 1e10;
 
         uint256 currentTCR = (coll * price) / debt;
@@ -405,7 +442,6 @@ contract Setup is Test, IEvents {
 
     function calcTCR() internal view returns (uint256) {
         IBorrowerOperations _borrowerOperations = IBorrowerOperations(strategy.BORROWER_OPERATIONS());
-        AggregatorInterface oracle = AggregatorInterface(strategy.PRICE_FEED());
         uint256 price = uint256(oracle.latestAnswer()) * 1e10;
         return LiquityMath._computeCR(
             _borrowerOperations.getEntireBranchColl(), _borrowerOperations.getEntireBranchDebt(), price

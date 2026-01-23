@@ -7,11 +7,11 @@ import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
 
 contract OracleTest is Setup {
 
-    StrategyAprOracle public oracle;
+    StrategyAprOracle public _oracle;
 
     function setUp() public override {
         super.setUp();
-        oracle = new StrategyAprOracle(management);
+        _oracle = new StrategyAprOracle(management);
     }
 
     function checkOracle(
@@ -22,21 +22,21 @@ contract OracleTest is Setup {
         strategistDepositAndOpenTrove(true);
 
         // Check set up
-        assertEq(oracle.governance(), management);
+        assertEq(_oracle.governance(), management);
 
-        uint256 currentApr = oracle.aprAfterDebtChange(_strategy, 0);
+        uint256 currentApr = _oracle.aprAfterDebtChange(_strategy, 0);
         console2.log("currentApr", currentApr);
 
         // Should be greater than 0 but likely less than 100%
         assertGt(currentApr, 0, "ZERO");
         assertLt(currentApr, 1e18, "+100%");
 
-        uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(_strategy, -int256(_delta));
+        uint256 negativeDebtChangeApr = _oracle.aprAfterDebtChange(_strategy, -int256(_delta));
 
         // The apr should go up if deposits go down
         assertLt(currentApr, negativeDebtChangeApr, "negative change");
 
-        uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
+        uint256 positiveDebtChangeApr = _oracle.aprAfterDebtChange(_strategy, int256(_delta));
 
         assertGt(currentApr, positiveDebtChangeApr, "positive change");
     }

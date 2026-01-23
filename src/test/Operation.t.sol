@@ -35,6 +35,12 @@ contract OperationTest is Setup {
         assertEq(strategy.EXCHANGE(), address(exchange));
     }
 
+    function test_priceFeedOK() public {
+        int256 price = AggregatorInterface(strategy.PRICE_FEED()).latestAnswer();
+        console2.log("Price from price feed:", price);
+        assertGt(price, 0);
+    }
+
     function test_invalidDeployment() public {
         vm.expectRevert("!exchange");
         strategyFactory.newStrategy(
@@ -78,7 +84,7 @@ contract OperationTest is Setup {
         vm.stopPrank();
     }
 
-    function test_operation(
+    function test_operation1(
         uint256 _amount
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);

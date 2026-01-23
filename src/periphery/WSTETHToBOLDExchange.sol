@@ -5,9 +5,9 @@ import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeE
 
 import {IExchange} from "../interfaces/IExchange.sol";
 import {ICurveTricrypto} from "../interfaces/ICurveTricrypto.sol";
-import {ICurveStableSwapNG} from "../interfaces/ICurveStableSwapNG.sol";
+import {ICurveStableSwapNG as ICurvePool} from "../interfaces/ICurveStableSwapNG.sol";
 
-contract ETHToBOLDExchange is IExchange {
+contract WSTETHToBOLDExchange is IExchange {
 
     using SafeERC20 for IERC20;
 
@@ -21,18 +21,23 @@ contract ETHToBOLDExchange is IExchange {
     /// @notice BOLD/USDC Curve Pool
     int128 private constant BOLD_INDEX_BOLD_USDC_CURVE_POOL = 0;
     int128 private constant USDC_INDEX_BOLD_USDC_CURVE_POOL = 1;
-    ICurveStableSwapNG private constant BOLD_USDC_CURVE_POOL =
-        ICurveStableSwapNG(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
+    ICurvePool private constant BOLD_USDC_CURVE_POOL = ICurvePool(0xEFc6516323FbD28e80B85A497B65A86243a54B3E);
 
-    /// @notice WETH/USDC Curve Pool
-    uint256 private constant USDC_INDEX_TRICRYPTO = 0;
-    uint256 private constant WETH_INDEX_TRICRYPTO = 2;
-    ICurveTricrypto private constant TRICRYPTO = ICurveTricrypto(0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B);
+    /// @notice crvUSD/USDC Curve Pool
+    int128 private constant USDC_INDEX_CRVUSD_USDC_CURVE_POOL = 0;
+    int128 private constant CRVUSD_INDEX_CRVUSD_USDC_CURVE_POOL = 1;
+    ICurvePool private constant CRVUSD_USDC_CURVE_POOL = ICurvePool(0x4DEcE678ceceb27446b35C672dC7d61F30bAD69E);
+
+    /// @notice TricryptoLLAMA Curve Pool
+    uint256 private constant CRVUSD_INDEX_TRICRYPTO = 0;
+    uint256 private constant WSTETH_INDEX_TRICRYPTO = 2;
+    ICurveTricrypto private constant TRICRYPTO = ICurveTricrypto(0x2889302a794dA87fBF1D6Db415C1492194663D13);
 
     /// @notice Token addresses
     IERC20 private constant BOLD = IERC20(0x6440f144b7e50D6a8439336510312d2F54beB01D);
     IERC20 private constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 private constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20 private constant CRVUSD = IERC20(0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E);
+    IERC20 private constant WSTETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
 
     // ===============================================================
     // Constructor
@@ -41,8 +46,10 @@ contract ETHToBOLDExchange is IExchange {
     constructor() {
         BOLD.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
         USDC.forceApprove(address(BOLD_USDC_CURVE_POOL), type(uint256).max);
-        USDC.forceApprove(address(TRICRYPTO), type(uint256).max);
-        WETH.forceApprove(address(TRICRYPTO), type(uint256).max);
+        USDC.forceApprove(address(CRVUSD_USDC_CURVE_POOL), type(uint256).max);
+        CRVUSD.forceApprove(address(CRVUSD_USDC_CURVE_POOL), type(uint256).max);
+        CRVUSD.forceApprove(address(TRICRYPTO), type(uint256).max);
+        WSTETH.forceApprove(address(TRICRYPTO), type(uint256).max);
     }
 
     // ============================================================================================
@@ -58,7 +65,7 @@ contract ETHToBOLDExchange is IExchange {
     /// @notice Returns the address of the collateral token
     /// @return Address of the collateral token
     function COLLATERAL() external pure override returns (address) {
-        return address(WETH);
+        return address(WSTETH);
     }
 
     // ============================================================================================
@@ -95,6 +102,7 @@ contract ETHToBOLDExchange is IExchange {
     // ============================================================================================
 
     /// @notice Swaps from the borrow token to the collateral token
+    /// @dev Using our own minAmount check to make sure revert message is consistent
     /// @param _amount Amount of borrow tokens to swap
     /// @param _minAmount Minimum amount of collateral tokens to receive
     /// @return Amount of collateral tokens received
@@ -114,10 +122,19 @@ contract ETHToBOLDExchange is IExchange {
             address(this) // receiver
         );
 
-        // USDC --> WETH
+        // USDC --> crvUSD
+        _amountOut = CRVUSD_USDC_CURVE_POOL.exchange(
+            USDC_INDEX_CRVUSD_USDC_CURVE_POOL,
+            CRVUSD_INDEX_CRVUSD_USDC_CURVE_POOL,
+            _amountOut,
+            0, // minAmount
+            address(this) // receiver
+        );
+
+        // crvUSD --> WSTETH
         _amountOut = TRICRYPTO.exchange(
-            USDC_INDEX_TRICRYPTO,
-            WETH_INDEX_TRICRYPTO,
+            CRVUSD_INDEX_TRICRYPTO,
+            WSTETH_INDEX_TRICRYPTO,
             _amountOut,
             0, // minAmount
             false, // use_eth
@@ -130,6 +147,7 @@ contract ETHToBOLDExchange is IExchange {
     }
 
     /// @notice Swaps from the collateral token to the borrow token
+    /// @dev Using our own minAmount check to make sure revert message is consistent
     /// @param _amount Amount of collateral tokens to swap
     /// @param _minAmount Minimum amount of borrow tokens to receive
     /// @return Amount of borrow tokens received
@@ -137,16 +155,25 @@ contract ETHToBOLDExchange is IExchange {
         uint256 _amount,
         uint256 _minAmount
     ) internal returns (uint256) {
-        // Pull WETH
-        WETH.safeTransferFrom(msg.sender, address(this), _amount);
+        // Pull wstETH
+        WSTETH.safeTransferFrom(msg.sender, address(this), _amount);
 
-        // WETH --> USDC
+        // wstETH --> crvUSD
         uint256 _amountOut = TRICRYPTO.exchange(
-            WETH_INDEX_TRICRYPTO,
-            USDC_INDEX_TRICRYPTO,
+            WSTETH_INDEX_TRICRYPTO,
+            CRVUSD_INDEX_TRICRYPTO,
             _amount,
             0, // minAmount
             false, // use_eth
+            address(this) // receiver
+        );
+
+        // crvUSD --> USDC
+        _amountOut = CRVUSD_USDC_CURVE_POOL.exchange(
+            CRVUSD_INDEX_CRVUSD_USDC_CURVE_POOL,
+            USDC_INDEX_CRVUSD_USDC_CURVE_POOL,
+            _amountOut,
+            0, // minAmount
             address(this) // receiver
         );
 
