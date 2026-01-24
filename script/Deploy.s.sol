@@ -16,11 +16,7 @@ import {WSTETHToBOLDExchange} from "../src/periphery/WSTETHToBOLDExchange.sol";
 import {RETHToBOLDExchange} from "../src/periphery/RETHToBOLDExchange.sol";
 
 // import {LiquityV2LBStrategy as Strategy} from "../src/Strategy.sol";
-import {
-    LiquityV2LBStrategy as Strategy,
-    AggregatorInterface,
-    IAddressesRegistry
-} from "../src/Strategy.sol";
+import {LiquityV2LBStrategy as Strategy, AggregatorInterface, IAddressesRegistry} from "../src/Strategy.sol";
 
 // ---- Usage ----
 
@@ -79,7 +75,8 @@ contract Deploy is Script {
 
         // deploy strategy
         // address _oracle = address(new StrategyAprOracle());
-        IStrategyInterface _newStrategy = IStrategyInterface(address(new Strategy(_addressesRegistry, _priceFeed, _exchange, _name)));
+        IStrategyInterface _newStrategy =
+            IStrategyInterface(address(new Strategy(_addressesRegistry, _priceFeed, _exchange, _name)));
 
         // init
         _newStrategy.setPerformanceFeeRecipient(PERFORMANCE_FEE_RECIPIENT);
