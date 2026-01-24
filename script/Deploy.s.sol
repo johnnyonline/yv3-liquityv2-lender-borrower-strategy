@@ -50,9 +50,9 @@ contract Deploy is Script {
         address _deployer = vm.addr(_pk);
         require(_deployer == DEPLOYER, "!deployer");
 
-        // address _asset = WETH;
+        address _asset = WETH;
         // address _asset = WSTETH;
-        address _asset = RETH;
+        // address _asset = RETH;
 
         vm.startBroadcast(_pk);
 
@@ -85,7 +85,7 @@ contract Deploy is Script {
         _newStrategy.setPerformanceFeeRecipient(PERFORMANCE_FEE_RECIPIENT);
         // _newStrategy.setKeeper(YHAAS);
         _newStrategy.setPendingManagement(SMS);
-        // _newStrategy.setEmergencyAdmin(SMS);
+        _newStrategy.setEmergencyAdmin(SMS);
 
         // set APR oracle
         APR_ORACLE.setOracle(address(_newStrategy), STRATEGY_APR_ORACLE);
@@ -100,4 +100,6 @@ contract Deploy is Script {
 }
 
 // APR ORACLE: 0x8D26d5251cf5E228a4Aa7698C8C75879cEBec807
-// RETH 0x2fFff76ee152164f4dEfc95fB0cf88528251aB9E
+// RETH: 0x2fFff76ee152164f4dEfc95fB0cf88528251aB9E
+// WSTETH: 0x2637F30242BB8EEd4E8C261Aa5B6EBf0E9b970ef
+// WETH: 0x654973123cD5c7e3f47feE7E94a85B55E919f912
