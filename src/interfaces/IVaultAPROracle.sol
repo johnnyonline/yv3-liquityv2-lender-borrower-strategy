@@ -11,5 +11,9 @@ interface IVaultAPROracle {
         address _vault,
         int256 _delta
     ) external view returns (uint256 apr);
+    function setOracle(
+        address _strategy,
+        address _oracle
+    ) external;
 
 }

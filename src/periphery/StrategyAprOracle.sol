@@ -28,10 +28,7 @@ contract StrategyAprOracle is AprOracleBase {
     // Constructor
     // ===============================================================
 
-    /// @param _governance Address of the Governance contract
-    constructor(
-        address _governance
-    ) AprOracleBase("Liquity V2 Lender Borrower Strategy APR Oracle", _governance) {}
+    constructor() AprOracleBase("Liquity V2 Lender Borrower Strategy APR Oracle", address(0)) {}
 
     // ===============================================================
     // View functions

@@ -11,7 +11,7 @@ contract OracleTest is Setup {
 
     function setUp() public override {
         super.setUp();
-        _oracle = new StrategyAprOracle(management);
+        _oracle = new StrategyAprOracle();
     }
 
     function checkOracle(
@@ -22,7 +22,7 @@ contract OracleTest is Setup {
         strategistDepositAndOpenTrove(true);
 
         // Check set up
-        assertEq(_oracle.governance(), management);
+        assertEq(_oracle.governance(), address(0));
 
         uint256 currentApr = _oracle.aprAfterDebtChange(_strategy, 0);
         console2.log("currentApr", currentApr);
