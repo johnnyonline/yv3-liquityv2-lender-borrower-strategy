@@ -109,7 +109,7 @@ library TroveOps {
             _troveId,
             _balanceOfAsset, // collChange
             true, // isCollIncrease
-            MIN_DEBT - _balanceOfDebt, // boldChange
+            MIN_DEBT > _balanceOfDebt ? MIN_DEBT - _balanceOfDebt : 0, // boldChange
             true, // isDebtIncrease
             _upperHint,
             _lowerHint,
